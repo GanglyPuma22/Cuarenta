@@ -62,6 +62,10 @@ export default class Deck {
     }
   }
 
+  
+
+
+
 }
 
 
@@ -89,7 +93,7 @@ function checkAddition(selectedCards,playerCard,playedDeck,team){
     }, 0);
     //If condition met, team cards are adjusted and cards are removed from the played Deck
     if (sumCards == playerCard.value){
-     for (let i = 0; i < selectedCards.numberOfCard; i++){
+     for (let i = 0; i < selectedCards.numberOfCards; i++){
        playedDeck.splice(playedDeck.indexof(selectedCards[i]),1)
        team.teamCards += selectedCards[i]
      } 
@@ -149,4 +153,5 @@ function translate(card){
     return parseInt(card.value, 10)
   }
 }
+
 
