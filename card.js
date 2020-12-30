@@ -18,7 +18,8 @@ export default class Card {
       return "diamonds";
     }
   }
-
+   
+  /* Function creates an HTML image element for a given card */
   createHTML() {
     var img = document.createElement("img");
     var suitText = this.suitToText()
