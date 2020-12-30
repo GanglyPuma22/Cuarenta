@@ -70,11 +70,13 @@ export default class Deck {
    Outputs: 
   */
   checkLimpia(team){
-    if (this.numberOfCards == 0){
-      team.points += 2
-    } else{
-      return false
-    }
+    if (team.checkPoints) {
+      if (this.numberOfCards == 0){
+            team.points += 2
+          } else{
+            return false
+          }
+        }
   }
 
   
@@ -185,5 +187,3 @@ function translate(card){
     return parseInt(card.value, 10)
   }
 }
-
-
