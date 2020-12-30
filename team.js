@@ -12,7 +12,7 @@ export default class Team {
     // Once round is done, checks if the number of cards the team has won is over 19, and adjusts points accordingly
     checkOver(){
         let nc = this.teamCards.numberOfCards
-        if (nc > 19){
+        if (nc > 19 && this.points < 30){
             //If number of cards is odd, add an extra point to round up 
             let gainedPoints = nc % 2 == 0 ? (nc - 20) + 6: (nc-20) + 7
             this.points += gainedPoints
@@ -33,12 +33,17 @@ export default class Team {
           if (6 - ucards.length == 3) {
             
             //This should trigger a win
-          } else if (6- uncards.length == 4) {
+          } else if (6- uncards.length == 4 && this.checkPoints()) {
             
             this.points += 2
           } 
         }
       } 
+
+      checkPoints() {
+          if (this.points = 38) return false;
+          else return true
+      }
             
 }
 
@@ -48,3 +53,4 @@ class Players{
     }
 
 }
+
