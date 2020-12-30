@@ -1,0 +1,22 @@
+*, *::after, *::before { 
+    box-sizing: border-box;
+  }
+
+#cuarenta {
+    width: 100vw;
+    height: 100vh;
+    background-color: rgb(5, 4, 4);
+    margin: auto;
+    position: relative
+    
+}
+
+#board {
+    width: 50vw;
+    height: 50vh;
+    background-color: white;
+    margin: 0 auto;
+    position: absolute;
+    top: 48.5%; 
+    transform: translate(50%,-50%);
+}
