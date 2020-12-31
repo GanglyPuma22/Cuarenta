@@ -47,10 +47,3 @@ export default class Team {
             
 }
 
-class Players{
-    constructor(deck){
-        this.deck = [];
-    }
-
-}
-
