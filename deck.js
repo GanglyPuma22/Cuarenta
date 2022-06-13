@@ -1,3 +1,4 @@
+import Card from "./card.js" 
 
 const SUITS = ["♠", "♣", "♥", "♦"]
 
@@ -9,18 +10,13 @@ const VALUES = [
   "5",
   "6",
   "7",
-  "8",
-  "9",
-  "10",
   "J",
   "Q",
   "K"
 ]
 
-import Card from "./card.js" 
-
 export default class Deck {
-	constructor(cards = freshDeck()) {
+	constructor(cards) {
 		this.cards = cards;
 	}
 	
@@ -28,6 +24,10 @@ export default class Deck {
 		return this.cards.length;
 	}
 	
+  getCards() {
+    return this.cards;
+  }
+
 	shuffle() {
 		for (let i = this.numberOfCards - 1; i > 0; i--) {
            const newIndex = Math.floor(Math.random() * (i + 1)); 
@@ -36,7 +36,18 @@ export default class Deck {
 		   this.cards[i] = oldValue;
 		}			
   }
-  
+
+  drawCards(amount, deck) {
+    for (let i = 0; i < amount; i++) {
+      let card = this.cards.pop();
+      console.log(JSON.stringify(card));
+      deck.cards.push(card);
+    }
+  }
+
+  removeTopCard() {
+    return this.cards.pop();
+  }
   // This function refills the players deck only if he has less than 6 cards, and removes those added cards from the main deck
   /*
    Good practice for functions is to add text that explains what it does, which you added.
@@ -86,7 +97,7 @@ export default class Deck {
 }
 
 
-function freshDeck() {
+export function freshDeck() {
   return SUITS.flatMap(suit => {
     return VALUES.map(value => {
       return new Card(suit, value)

@@ -1,6 +1,4 @@
-*, *::after, *::before { 
-    box-sizing: border-box;
-  }
+
 
 #cuarenta {
     width: 100vw;
@@ -19,4 +17,26 @@
     position: absolute;
     top: 48.5%; 
     transform: translate(50%,-50%);
+}
+
+.user-hand {
+    height: 25vh;
+    width: 50vw;
+    background-color: white;
+    position: relative;
+    top: 100%;
+    margin: 0 auto;
+    border-top:3px solid black;
+    
+}
+
+.card {
+    margin: 0 auto;
+    position: relative;
+    height: 90%;
+    width: 19%;
+    top: 7%;
+    left: 1%;
+    padding-inline: 2px;
+    display: inline-block;
 }
