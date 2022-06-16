@@ -1,15 +1,24 @@
-
+#game-host {
+    z-index: 5;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    top: 48.5%; 
+    transform: translate(50%,-50%);
+    position: absolute;
+}
 
 #cuarenta {
     width: 100vw;
     height: 100vh;
     background-color: rgb(5, 4, 4);
     margin: auto;
-    position: relative
-    
+    position: relative;
 }
 
 #board {
+    z-index: 1;
     width: 50vw;
     height: 50vh;
     background-color: white;
@@ -27,8 +36,33 @@
     top: 100%;
     margin: 0 auto;
     border-top:3px solid black;
+    display: none;
     
 }
+
+.button {
+    width: 25vw;
+    z-index:10;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    margin: 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+  }
+
+  .joinGame {background-color: #4CAF50;} /* Green */
+  .joinGame {top: 40%;}
+  .createGame {background-color: #008CBA;} /* Blue */
 
 .card {
     margin: 0 auto;

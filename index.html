@@ -70,33 +70,73 @@
               drag = false;
             }
         }
-        window.onload = function() {
-            document.onmousedown = startDrag;
-            document.onmouseup = stopDrag;
-        }
+          window.onload = function() {
+            document.querySelector('.user-hand').onmousedown = startDrag;
+            document.querySelector('.user-hand').onmouseup = stopDrag;
+          }
 </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="cuarenta">
+    <div id="game-host"> 
+      <div id = "choose-game-creation-option"> 
+        <button class="button createGame">Create a Game</button>
+        <button class="button joinGame">Join a Game</button>
+      </div>
+    </div>
     <div id="board"> 
       <div class ="user-hand"> </div>
-    </div>
-    <div class="playerHands">
-      <div id ="player1"> </div>
-      <div id ="player2"> </div>
-      <div id ="player3"> </div>
-      <div id ="player4"> </div>
     </div>
   </div>
 
   <div class="test"> </div>
   
-
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAnvPUD8NmYUC-fA7ypMvlrfIdAngL0KF0",
+    authDomain: "cuarenta-dfbf1.firebaseapp.com",
+    projectId: "cuarenta-dfbf1",
+    storageBucket: "cuarenta-dfbf1.appspot.com",
+    messagingSenderId: "78708075147",
+    appId: "1:78708075147:web:3bffd7a9a76f0ed27fc28e",
+    measurementId: "G-QE2JKLQ686"
+  };
+    firebase.initializeApp(firebaseConfig);
+  </script>
   <!-- <div class="computer-deck deck"></div>
   <div class="computer-card-slot card-slot"></div>
   <div class="text"></div>
   <div class="player-deck deck"></div>
   <div class="player-card-slot card-slot"></div> -->
+  <!-- <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-analytics.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-auth.js";
+
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyAnvPUD8NmYUC-fA7ypMvlrfIdAngL0KF0",
+      authDomain: "cuarenta-dfbf1.firebaseapp.com",
+      projectId: "cuarenta-dfbf1",
+      storageBucket: "cuarenta-dfbf1.appspot.com",
+      messagingSenderId: "78708075147",
+      appId: "1:78708075147:web:3bffd7a9a76f0ed27fc28e",
+      measurementId: "G-QE2JKLQ686"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+  </script> -->
+  
 </body>
 </html>
