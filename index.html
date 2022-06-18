@@ -71,8 +71,8 @@
             }
         }
           window.onload = function() {
-            document.querySelector('.user-hand').onmousedown = startDrag;
-            document.querySelector('.user-hand').onmouseup = stopDrag;
+            document.querySelector('.user-hand').children.onmousedown = startDrag;
+            document.querySelector('.user-hand').children.onmouseup = stopDrag;
           }
 </script>
   <link rel="stylesheet" href="styles.css">
@@ -81,8 +81,19 @@
   <div id="cuarenta">
     <div id="game-host"> 
       <div id = "choose-game-creation-option"> 
-        <button class="button createGame">Create a Game</button>
-        <button class="button joinGame">Join a Game</button>
+        <button class="button createGame" name = "create">Create a Game</button>
+        <button class="button joinGame" name = "join">Join a Game</button>
+      </div>
+      <div id = "join-game"> 
+        <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
+        <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
+      </div>
+      <div id = "create-game">
+        <p class="p created-session-id"> Create Game Session: </p>
+        <button class="button createGameSession" name = "create-session"> Create Game </button> 
+      </div>
+      <div id = "create-game-id-created">
+
       </div>
     </div>
     <div id="board"> 

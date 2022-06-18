@@ -1,5 +1,5 @@
 #game-host {
-    z-index: 5;
+    z-index: 2;
     width: 50vw;
     height: 70vh;
     background-color: white;
@@ -28,6 +28,38 @@
     transform: translate(50%,-50%);
 }
 
+#join-game {
+    display: none;
+    z-index: 3;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    /* top: 48.5%; 
+    transform: translate(50%,-50%); */
+    position: relative;
+}
+
+#create-game {
+    display: none;
+    z-index: 3;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    position: relative;
+}
+
+#create-game-id-created {
+    display: none;
+    z-index: 3;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    position: relative;
+}
+
 .user-hand {
     height: 25vh;
     width: 50vw;
@@ -40,9 +72,10 @@
     
 }
 
+
 .button {
     width: 25vw;
-    z-index:10;
+    z-index:4;
     border: none;
     color: white;
     padding: 15px 32px;
@@ -63,6 +96,21 @@
   .joinGame {background-color: #4CAF50;} /* Green */
   .joinGame {top: 40%;}
   .createGame {background-color: #008CBA;} /* Blue */
+  .createGameSession {background-color: rebeccapurple;}
+
+.input {
+    width: 25vw;
+    height: 20px;
+}
+ .join-session-id {margin-left : 5%;}
+
+.p {
+    color: black;
+}
+ .join-session-id {margin-left : 5%;}
+ .created-session-id {top: 40%;}
+ .created-session-id {left: 25%;}
+ .created-session-id {position: relative;}
 
 .card {
     margin: 0 auto;
