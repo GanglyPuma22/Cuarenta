@@ -1,10 +1,7 @@
 import Deck from "./deck.js"
 import { freshDeck } from "./deck.js";
 
-var deck = new Deck(freshDeck());
-var player1 = new Deck([]);
-deck.shuffle();
-deck.drawCards(5, player1);
+
 
 function makeid(length) {
   var result           = '';
@@ -42,23 +39,83 @@ joinGameBtn.addEventListener("click", function() {
 
 
 (function () {
+  //Database vars
   let playerId;
   let playerRef;
+  let boardRef;
+  let deckRef;
+  let gameSessionRef;
 
-  //Use function to create teams in firebase once everyone has joined the game
-  function initGame() {
-    const allPlayersRef = firebase.database().ref(`players`);
-    const allTeamsRef = firebase.database().ref('teams');
-  }
-  
+  //Storage vars
   let players = {};
   let team1 = {};
   let team2 = {};
+  let playerLimit = 4;
+  //Class variables 
+  let deck; 
+  let board;
+  let playerHand; //database does not need player hand info
+
+  function createTeams() {
+    let counter = 0;
+
+    Object.keys(players).forEach((key) => {
+      console.log(players[key].playerId);
+      if (counter == 0) { 
+        team1.player1 = players[key];
+        counter++;
+      } else if (counter == 1) {
+        team1.player2 = players[key];
+        counter++;
+      } else if (counter == 2) {
+        team2.player1 = players[key];
+        counter++;
+      } else if (counter == 3) {
+        team2.player2 = players[key];
+        counter++;
+      } 
+    });
+  }
+
+  function initGameMember() {
+
+  }
+
+  //Use function to create teams in firebase once everyone has joined the game
+  function initGameHost() {
+    //Set up references 
+    //Check for 4 players in on value change reference below
+    //Call this function there to setup deck, give cards to players from deck
+    //Create deck in database and here constantly updating it using on value changes 
+    //Set up html visuals handling the card back showing up, deck counter and player cards showingUp
+    //Set up deck on child removed update card count
+
+    //Create game deck
+    deck = new Deck(freshDeck());
+    deck.shuffle();
+    //Create deck storing current cards on board;
+    board = new Deck([]);
+    //Create user's card deck
+    playerHand = new Deck([]);
+    //Create board and deck in database
+    gameSessionRef.update({
+      deck
+    })
+
+    
+    //Create teams 
+    createTeams();
+    console.log(team1);
+    console.log(team2);
+    //deck.drawCards(5, playerHand);
+  }
+  
   
   //Show option to create a game session for host
   gameSessionBtn.addEventListener("click", function() {
     var gameId = makeid(20);
-    let gameSessionRef = firebase.database().ref('gameSession/'+gameId);
+    gameSessionRef = firebase.database().ref('gameSession/'+gameId);
+    //deckRef = firebase.database().ref('gameSession/'+gameId+'/deck');
 
     //Create game session
     gameSessionRef.set({
@@ -72,35 +129,44 @@ joinGameBtn.addEventListener("click", function() {
       playerId: playerId
     });
 
+    //Updates local variable players with data every time players gets updated
+    newPlayerRef.on("value", (snapshot) => {
+      //Fires whenever a change occurs
+      players = snapshot.val() || {};
+    })
+
     //Get current game session player count data
     let playerCountRef = firebase.database().ref('gameSession/'+gameId+'/playerCount');
 
-    //Fires whenever a change occurs
+    //Fires whenever a change occurs to playerCount for current game session
     playerCountRef.on("value", (snapshot) => {
       //Update game host's playerCount
-      document.getElementById("player-count").innerHTML = "   Player Count: " + snapshot.val();
+      let playerCountEl = document.getElementById("player-count-host");
+      if (playerCountEl && snapshot.val() < 5) { //Check not null and player count no more than 5
+        playerCountEl.innerHTML = "   Player Count: " + snapshot.val();
+      }
+      if (snapshot.val() == playerLimit) {
+        console.log("START GAME");
+        initGameHost();
+      }
     })
 
-    //Resolve promise 
-    playerCountRef.get().then(function() {
-      return playerCountRef.once("value");
-    }).then(function(snapshot) {
-      //Show key to game session creator and hide button that created game
-      document.getElementById('create-game').style.display = "none";
-      let showCreated = document.getElementById("create-game-id-created");
-      showCreated.style.display = "block";
-      const para1 = document.createElement("p");
-      const para2 = document.createElement("p");
-      const para3 = document.createElement("p");
-      para1.innerHTML = "   Game Session ID is: " + gameId;
-      para2.innerHTML = "   Share your game session ID to three other players. Once all four are connected the game will start.";
-      para3.innerHTML = "   Player Count: " + snapshot.val();
-      para3.setAttribute("id", "player-count");
-      showCreated.appendChild(para1);
-      showCreated.appendChild(para2);
-      showCreated.appendChild(para3);
-      //Start Game
-    });
+    //Show key to game session creator and hide button that created game
+    document.getElementById('create-game').style.display = "none";
+    let showCreated = document.getElementById("create-game-id-created");
+    //Initialize text to show game creator
+    const para1 = document.createElement("p");
+    const para2 = document.createElement("p");
+    const para3 = document.createElement("p");
+    para3.setAttribute("id", "player-count-host"); //ID needs to be set for playerCount change event listener
+    para1.innerHTML = "Game Session ID is: " + gameId;
+    para2.innerHTML = "Share your game session ID to three other players. Once all four are connected the game will start.";
+    para3.innerHTML = "Player Count: 1";
+    showCreated.appendChild(para1);
+    showCreated.appendChild(para2);
+    showCreated.appendChild(para3);
+    //Show the three paragraphs
+    showCreated.style.display = "block";
 
   });
 
@@ -111,11 +177,33 @@ joinGameBtn.addEventListener("click", function() {
       let gameSessionJoinRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/sessionPlayers');
       let playerCountRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/playerCount');
 
+      //Display text for user
+      const para1 = document.createElement("p");
+      const playerCountParaEl = document.createElement("p");
+      para1.innerHTML = "Successfully joined the game. Waiting on four players";
+      playerCountParaEl.innerHTML = "Player Count:";
+      playerCountParaEl.setAttribute("id", "player-count-member");
+      document.getElementById("join-game").appendChild(para1);
+      document.getElementById("join-game").appendChild(playerCountParaEl);
+
+      //Fires whenever a change occurs to playerCount for current game session
+      playerCountRef.on("value", (snapshot) => {
+        //Update joining user's playerCount
+        let playerCountEl = document.getElementById("player-count-member");
+        if (playerCountEl && snapshot.val() < 5) { //Check not null and player count at most 4
+          playerCountEl.innerHTML = "Player Count: " + snapshot.val();
+        }
+        if (snapshot.val() == playerLimit) {
+          console.log("START GAME");
+          initGameMember();
+      }
+      })
+
       //Resolve promise getting current player count data
       playerCountRef.get().then(function() {
         return playerCountRef.once("value");
       }).then(function(snapshot) {
-      let currentPlayerCount = snapshot.val();
+      let currentPlayerCount = snapshot.val(); //Player count before adding the user pressing this
       //If session isn't full add player to it
       if (currentPlayerCount < 4) {
         //Add this player to gameSession's players
@@ -130,11 +218,13 @@ joinGameBtn.addEventListener("click", function() {
         console.log("GAME FULL");
       }
 
-      if (currentPlayerCount + 1 == 4) {
-        console.log(currentPlayerCount);
-        console.log("START GAME");
-        //Start Game
-      }
+
+      // if (currentPlayerCount + 1 == 4) {
+      //   console.log(currentPlayerCount);
+      //   console.log("START GAME");
+      //   //Start Game
+      //   initGame();
+      // }
       });
     }
     // if (joinSessionInp.value == )

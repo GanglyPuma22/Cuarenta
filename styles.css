@@ -107,7 +107,7 @@
 .p {
     color: black;
 }
- .join-session-id {margin-left : 5%;}
+ .join-session-id {margin-left : 5%;} 
  .created-session-id {top: 40%;}
  .created-session-id {left: 25%;}
  .created-session-id {position: relative;}
