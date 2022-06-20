@@ -8,18 +8,34 @@ deck.drawCards(5, player1);
 
 const createGameBtn = document.getElementById("choose-game-creation-option").children.item(0);
 const joinGameBtn = document.getElementById("choose-game-creation-option").children.item(1);
+const joinLobbyBtn = document.getElementById("join-game-screen").children.item(4);
+const createLobbyBtn = document.getElementById("create-game-screen").children.item(4);
+
+
 //Handle creating a game
 createGameBtn.addEventListener("click", function() {
   console.log("Hello there");
-  document.getElementById("game-host").style.display = "none";
-  document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  showCards(player1);
+  document.getElementById("choose-game-creation-option").style.display = "none";
+  document.getElementById("create-game-screen").style.display = "block"
 });
 
 //Handle joining a game
 joinGameBtn.addEventListener("click", function() {
   console.log("Hello there");
-  document.getElementById("game-host").style.display = "none";
+  document.getElementById("choose-game-creation-option").style.display = "none";
+  document.getElementById("join-game-screen").style.display = "block"
+});
+
+joinLobbyBtn.addEventListener("click", function() {
+  console.log("Hello there");
+  document.getElementById("join-game-screen").style.display = "none";
+  document.getElementsByClassName("user-hand").item(0).style.display = "block";
+  showCards(player1);
+});
+
+createLobbyBtn.addEventListener("click", function() {
+  console.log("Hello there");
+  document.getElementById("create-game-screen").style.display = "none";
   document.getElementsByClassName("user-hand").item(0).style.display = "block";
   showCards(player1);
 });
@@ -76,9 +92,6 @@ const CARD_VALUE_MAP = {
    "K": 13,
    "A": 14
 }
-
-
-
 
 const imageTest = document.querySelector(".test");
 const userHandDiv = document.querySelector(".user-hand");

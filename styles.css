@@ -1,4 +1,4 @@
-#game-host {
+#choose-game-creation-option {
     z-index: 5;
     width: 50vw;
     height: 70vh;
@@ -9,10 +9,37 @@
     position: absolute;
 }
 
+#create-game-screen {
+    z-index: 5;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    top: 48.5%; 
+    transform: translate(50%,-50%);
+    position: absolute;
+    display: none;
+    text-align:center
+}
+
+#join-game-screen {
+    z-index: 5;
+    width: 50vw;
+    height: 70vh;
+    background-color: white;
+    margin: 0 auto;
+    top: 48.5%; 
+    transform: translate(50%,-50%);
+    position: absolute;
+    display: none;
+    text-align:center
+}
+
+
 #cuarenta {
     width: 100vw;
     height: 100vh;
-    background-color: rgb(5, 4, 4);
+    background-color: rgb(40, 216, 0);
     margin: auto;
     position: relative;
 }
@@ -21,7 +48,7 @@
     z-index: 1;
     width: 50vw;
     height: 50vh;
-    background-color: white;
+    background-color: rgb(53, 195, 34);
     margin: 0 auto;
     position: absolute;
     top: 48.5%; 
@@ -33,11 +60,21 @@
     width: 50vw;
     background-color: white;
     position: relative;
-    top: 100%;
+    top: 75%;
     margin: 0 auto;
     border-top:3px solid black;
-    display: none;
-    
+    display: none;   
+}
+
+.user-info {
+    height: 25vh;
+    width: 25vw;
+    background-color: white;
+    position: relative;
+    right: 100%;
+    margin: 0 auto;
+    border:3px solid black;
+    display: block;   
 }
 
 .button {
@@ -63,6 +100,8 @@
   .joinGame {background-color: #4CAF50;} /* Green */
   .joinGame {top: 40%;}
   .createGame {background-color: #008CBA;} /* Blue */
+  .joinLobby {background-color: #ba0019;}
+  .createLobby {background-color: #ba0019;}
 
 .card {
     margin: 0 auto;
@@ -73,4 +112,9 @@
     left: 1%;
     padding-inline: 2px;
     display: inline-block;
+}
+
+.input{
+    position: relative;
+    left: 50%;
 }

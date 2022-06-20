@@ -55,14 +55,12 @@
             imgPos = targ.getBoundingClientRect();
             console.log(imgPos.top);
             console.log(imgPos.left);
-            //console.log(targ.style.left);
-            //console.log(targ.style.top);
             console.log(position.top);
             console.log(position.left);
             console.log("+++++++++++++++++++");
-            if ((parseFloat(imgPos.left) > parseFloat(board.left) && parseFloat(imgPos.left) < parseFloat(board.left) + (parseFloat(board.width) - parseFloat(imPos.width))) &&
-                 (parseFloat(imgPos.top) > parseFloat(board.top) && parseFloat(img.top) < parseFloat(board.top) + (parseFloat(board.height) - imgPos.height))) {
-            //if (parseFloat(targ.style.top) + parseFloat(position.height) + parseFloat(targ.height)/2 > 0) {
+            if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
+                 (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
+        
               drag = false;
             } else {
               targ.style.left = startingX;
@@ -79,14 +77,24 @@
 </head>
 <body>
   <div id="cuarenta">
-    <div id="game-host"> 
-      <div id = "choose-game-creation-option"> 
-        <button class="button createGame">Create a Game</button>
-        <button class="button joinGame">Join a Game</button>
-      </div>
+    <div id = "choose-game-creation-option"> 
+      <button class="button createGame">Create a Game</button>
+      <button class="button joinGame">Join a Game</button>
     </div>
-    <div id="board"> 
-      <div class ="user-hand"> </div>
+    <div id = "create-game-screen"> 
+      <label for="name">Name:</label>
+      <input type="text" id="name" name="fname"><br><br>         
+      <button class="button createLobby">Create a Lobby</button>
+    </div>
+    <div id = "join-game-screen"> 
+      <label for="name">Name:</label>
+      <input type="text" id="name" name="fname"><br><br>         
+      <button class="button joinLobby">Join a Lobby</button>
+    </div>
+    <div id="board"> </div>
+    <div class ="user-hand"> </div>
+    <div class ="user info"> 
+      <p> User info</p>
     </div>
   </div>
 
