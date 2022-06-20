@@ -3,7 +3,6 @@ import Deck from "./deck.js"
 import { freshDeck } from "./deck.js";
 
 
-<<<<<<< HEAD
 const createGameBtn = document.getElementById("choose-game-creation-option").children.item(0);
 const joinGameBtn = document.getElementById("choose-game-creation-option").children.item(1);
 const joinLobbyBtn = document.getElementById("join-game-screen").children.item(4);
@@ -15,37 +14,10 @@ createGameBtn.addEventListener("click", function() {
   console.log("Hello there");
   document.getElementById("choose-game-creation-option").style.display = "none";
   document.getElementById("create-game-screen").style.display = "block"
-=======
-
-function makeid(length) {
-  var result           = '';
-  var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  var charactersLength = characters.length;
-  for ( var i = 0; i < length; i++ ) {
-    result += characters.charAt(Math.floor(Math.random() * 
-charactersLength));
- }
- return result;
-}
-
-const createGameBtn = document.querySelector("button[name='create']");
-const joinGameBtn = document.querySelector("button[name='join']");
-const gameSessionBtn = document.querySelector("button[name='create-session'");
-const joinSessionInp = document.querySelector("input[name='join-session'");
-
-//Show option to create a game
-createGameBtn.addEventListener("click", function() {
-  console.log("hello");
-  document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("create-game").style.display = "block";
-  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  //showCards(player1);
->>>>>>> f2a847833c4465cdca065e7bd9e51263b08a49e9
 });
 
 //Show option to join a game
 joinGameBtn.addEventListener("click", function() {
-<<<<<<< HEAD
   console.log("Hello there");
   document.getElementById("choose-game-creation-option").style.display = "none";
   document.getElementById("join-game-screen").style.display = "block"
@@ -63,12 +35,6 @@ createLobbyBtn.addEventListener("click", function() {
   document.getElementById("create-game-screen").style.display = "none";
   document.getElementsByClassName("user-hand").item(0).style.display = "block";
   showCards(player1);
-=======
-  document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("join-game").style.display = "block";
-  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  //showCards(player1);
->>>>>>> f2a847833c4465cdca065e7bd9e51263b08a49e9
 });
 
 
@@ -350,12 +316,8 @@ const CARD_VALUE_MAP = {
    "A": 14
 }
 
-<<<<<<< HEAD
 const imageTest = document.querySelector(".test");
 const userHandDiv = document.querySelector(".user-hand");
-=======
-
->>>>>>> f2a847833c4465cdca065e7bd9e51263b08a49e9
 function showCards(playerdeck) {
   const userHandDiv = document.querySelector(".user-hand");
   //let counter = 0;

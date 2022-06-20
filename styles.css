@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 #choose-game-creation-option {
     z-index: 5;
-=======
-#game-host {
-    z-index: 2;
->>>>>>> f2a847833c4465cdca065e7bd9e51263b08a49e9
     width: 50vw;
     height: 70vh;
     background-color: white;
@@ -138,26 +133,8 @@
   .joinGame {background-color: #4CAF50;} /* Green */
   .joinGame {top: 40%;}
   .createGame {background-color: #008CBA;} /* Blue */
-<<<<<<< HEAD
   .joinLobby {background-color: #ba0019;}
   .createLobby {background-color: #ba0019;}
-=======
-  .createGameSession {background-color: rebeccapurple;}
-
-.input {
-    width: 25vw;
-    height: 20px;
-}
- .join-session-id {margin-left : 5%;}
-
-.p {
-    color: black;
-}
- .join-session-id {margin-left : 5%;} 
- .created-session-id {top: 40%;}
- .created-session-id {left: 25%;}
- .created-session-id {position: relative;}
->>>>>>> f2a847833c4465cdca065e7bd9e51263b08a49e9
 
 .card {
     margin: 0 auto;
