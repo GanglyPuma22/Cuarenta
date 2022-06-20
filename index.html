@@ -60,7 +60,6 @@
             console.log("+++++++++++++++++++");
             if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
                  (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
-        
               drag = false;
             } else {
               targ.style.left = startingX;
@@ -77,24 +76,25 @@
 </head>
 <body>
   <div id="cuarenta">
-    <div id = "choose-game-creation-option"> 
-      <button class="button createGame">Create a Game</button>
-      <button class="button joinGame">Join a Game</button>
+    <div id="game-host"> 
+      <div id = "choose-game-creation-option"> 
+        <button class="button createGame" name = "create">Create a Game</button>
+        <button class="button joinGame" name = "join">Join a Game</button>
+      </div>
+      <div id = "join-game"> 
+        <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
+        <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
+      </div>
+      <div id = "create-game">
+        <p class="p created-session-id"> Create Game Session: </p>
+        <button class="button createGameSession" name = "create-session"> Create Game </button> 
+      </div>
+      <div id = "create-game-id-created">
+
+      </div>
     </div>
-    <div id = "create-game-screen"> 
-      <label for="name">Name:</label>
-      <input type="text" id="name" name="fname"><br><br>         
-      <button class="button createLobby">Create a Lobby</button>
-    </div>
-    <div id = "join-game-screen"> 
-      <label for="name">Name:</label>
-      <input type="text" id="name" name="fname"><br><br>         
-      <button class="button joinLobby">Join a Lobby</button>
-    </div>
-    <div id="board"> </div>
-    <div class ="user-hand"> </div>
-    <div class ="user info"> 
-      <p> User info</p>
+    <div id="board"> 
+      <div class ="user-hand"> </div>
     </div>
   </div>
 
@@ -115,7 +115,36 @@
   };
     firebase.initializeApp(firebaseConfig);
   </script>
+  <!-- <div class="computer-deck deck"></div>
+  <div class="computer-card-slot card-slot"></div>
+  <div class="text"></div>
+  <div class="player-deck deck"></div>
+  <div class="player-card-slot card-slot"></div> -->
+  <!-- <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-analytics.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.8.3/firebase-auth.js";
+
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
   
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyAnvPUD8NmYUC-fA7ypMvlrfIdAngL0KF0",
+      authDomain: "cuarenta-dfbf1.firebaseapp.com",
+      projectId: "cuarenta-dfbf1",
+      storageBucket: "cuarenta-dfbf1.appspot.com",
+      messagingSenderId: "78708075147",
+      appId: "1:78708075147:web:3bffd7a9a76f0ed27fc28e",
+      measurementId: "G-QE2JKLQ686"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+  </script> -->
   
 </body>
 </html>
