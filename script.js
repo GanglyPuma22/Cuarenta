@@ -3,41 +3,39 @@ import Deck from "./deck.js"
 import { freshDeck } from "./deck.js";
 
 
-const createGameBtn = document.getElementById("choose-game-creation-option").children.item(0);
-const joinGameBtn = document.getElementById("choose-game-creation-option").children.item(1);
-const joinLobbyBtn = document.getElementById("join-game-screen").children.item(4);
-const createLobbyBtn = document.getElementById("create-game-screen").children.item(4);
 
+function makeid(length) {
+  var result           = '';
+  var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  var charactersLength = characters.length;
+  for ( var i = 0; i < length; i++ ) {
+    result += characters.charAt(Math.floor(Math.random() * 
+charactersLength));
+ }
+ return result;
+}
 
-//Handle creating a game
+const createGameBtn = document.querySelector("button[name='create']");
+const joinGameBtn = document.querySelector("button[name='join']");
+const gameSessionBtn = document.querySelector("button[name='create-session'");
+const joinSessionInp = document.querySelector("input[name='join-session'");
+
+//Show option to create a game
 createGameBtn.addEventListener("click", function() {
-  console.log("Hello there");
+  console.log("hello");
   document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("create-game-screen").style.display = "block"
+  document.getElementById("create-game").style.display = "block";
+  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
+  //showCards(player1);
 });
 
 //Show option to join a game
 joinGameBtn.addEventListener("click", function() {
-  console.log("Hello there");
   document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("join-game-screen").style.display = "block"
+  document.getElementById("join-game").style.display = "block";
+  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
+  //showCards(player1);
 });
-
-joinLobbyBtn.addEventListener("click", function() {
-  console.log("Hello there");
-  document.getElementById("join-game-screen").style.display = "none";
-  document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  showCards(player1);
-});
-
-createLobbyBtn.addEventListener("click", function() {
-  console.log("Hello there");
-  document.getElementById("create-game-screen").style.display = "none";
-  document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  showCards(player1);
-});
-
-
 
 (function () {
   //Database vars
@@ -316,8 +314,7 @@ const CARD_VALUE_MAP = {
    "A": 14
 }
 
-const imageTest = document.querySelector(".test");
-const userHandDiv = document.querySelector(".user-hand");
+
 function showCards(playerdeck) {
   const userHandDiv = document.querySelector(".user-hand");
   //let counter = 0;
