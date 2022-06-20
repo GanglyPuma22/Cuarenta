@@ -134,6 +134,12 @@ joinGameBtn.addEventListener("click", function() {
     gameSessionRef = firebase.database().ref('gameSession/'+gameId);
     //deckRef = firebase.database().ref('gameSession/'+gameId+'/deck');
 
+    let username = document.querySelector("input[name='create-name'").value
+    console.log(username)
+    playerRef.update({
+      name: username
+    })
+    
     //Create game session
     gameSessionRef.set({
       id: gameId,
@@ -227,6 +233,12 @@ joinGameBtn.addEventListener("click", function() {
       playerCountParaEl.setAttribute("id", "player-count-member");
       document.getElementById("join-game").appendChild(para1);
       document.getElementById("join-game").appendChild(playerCountParaEl);
+
+      let username = document.querySelector("input[name='join-name'").value
+      console.log(username)
+      playerRef.update({
+        name: username
+      })
 
       //Fires whenever a change occurs to playerCount for current game session
       playerCountRef.on("value", (snapshot) => {
