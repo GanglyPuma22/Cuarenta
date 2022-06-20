@@ -55,14 +55,11 @@
             imgPos = targ.getBoundingClientRect();
             console.log(imgPos.top);
             console.log(imgPos.left);
-            //console.log(targ.style.left);
-            //console.log(targ.style.top);
             console.log(position.top);
             console.log(position.left);
             console.log("+++++++++++++++++++");
-            if ((parseFloat(imgPos.left) > parseFloat(board.left) && parseFloat(imgPos.left) < parseFloat(board.left) + (parseFloat(board.width) - parseFloat(imPos.width))) &&
-                 (parseFloat(imgPos.top) > parseFloat(board.top) && parseFloat(img.top) < parseFloat(board.top) + (parseFloat(board.height) - imgPos.height))) {
-            //if (parseFloat(targ.style.top) + parseFloat(position.height) + parseFloat(targ.height)/2 > 0) {
+            if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
+                 (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
               drag = false;
             } else {
               targ.style.left = startingX;
