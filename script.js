@@ -22,6 +22,7 @@ const joinSessionBtn = document.querySelector("button[name='join-session'");
 const joinSessionInp = document.querySelector("input[name='join-session'");
 
 
+
 //Show option to create a game
 createGameBtn.addEventListener("click", function() {
   console.log("hello");
@@ -230,9 +231,11 @@ joinGameBtn.addEventListener("click", function() {
     
     if (joinSessionInp.value.length == 20) {
       //let sessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
+      let gameID = joinSessionInp.value
       gameSessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
       let gameSessionJoinRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/sessionPlayers');
       let playerCountRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/playerCount');
+      let playersRef = firebase.database().ref('players/')
 
       //Display text for user
       const para1 = document.createElement("p");
@@ -256,7 +259,33 @@ joinGameBtn.addEventListener("click", function() {
 
       //Fires whenever a change occurs to playerCount for current game session
       playerCountRef.on("value", (snapshot) => {  
-
+        
+        gameSessionJoinRef.get().then(function() {
+          return  gameSessionJoinRef.once("value");
+        }).then(function(snapshot) {
+          let current = snapshot.val(); 
+          let iteration = 1
+          Object.keys(current).forEach((key) => {
+            let id = firebase.database().ref(`gameSession/${gameID}/sessionPlayers/${key}/playerId/`)
+            //
+            console.log(iteration)
+            iteration += 1
+            id.get().then(function() {
+              return id.once("value");
+            }).then(function(snapshot) {
+              let playerId = snapshot.val();
+              let nameRef = firebase.database().ref(`players/${playerId}/name/`)
+              
+              nameRef.get().then(function() {
+                return nameRef.once("value");
+              }).then(function(snapshot) {
+                let name = snapshot.val();
+                console.log(name)                
+              });
+            });
+          }); 
+          });
+        
         //Update joining user's playerCount
         let playerCountEl = document.getElementById("player-count-member");
         if (playerCountEl && snapshot.val() < 5) { //Check not null and player count at most 4
