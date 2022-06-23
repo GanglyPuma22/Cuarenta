@@ -319,6 +319,7 @@ joinGameBtn.addEventListener("click", function() {
                 var para3 = document.createElement("li")
                 para3.innerHTML = name
                 document.getElementById("playerList").appendChild(para3)
+                
               });
             });
           }); 
