@@ -98,6 +98,7 @@ joinGameBtn.addEventListener("click", function() {
 
   //Function initiates watching variables changes for both host and members
   function initRefs() {
+
     //Updates local var playerTurnID everytime it gets updates in db
     gameSessionRef.child('currentPlayer').on("value", (snapshot) => {
       playerTurnID = snapshot.val() || "";
@@ -148,12 +149,36 @@ joinGameBtn.addEventListener("click", function() {
       id: gameId,
       playerCount: 1
     });
-    
+    //Show key to game session creator and hide button that created game
+    document.getElementById('create-game').style.display = "none";
+    let showCreated = document.getElementById("create-game-id-created");
+    //Initialize text to show game creator
+    const para1 = document.createElement("p");
+    const para2 = document.createElement("p");
+    const para3 = document.createElement("p");
+    para3.setAttribute("id", "player-count-host"); //ID needs to be set for playerCount change event listener
+    para1.innerHTML = "Game Session ID is: " + gameId;
+    para2.innerHTML = "Share your game session ID to three other players. Once all four are connected the game will start.";
+    para3.innerHTML = "Player Count: 1";
+    const para4 = document.createElement("ol");
+    const para5 = document.createElement("li");
+    para5.innerHTML = username
+    para4.setAttribute("id","playerList")
+    showCreated.appendChild(para1);
+    showCreated.appendChild(para2);
+    showCreated.appendChild(para3);
+    showCreated.appendChild(para4);
+    para4.append(para5)
+    //Show the three paragraphs
+    showCreated.style.display = "block";
     //Add player to game session's players
     let newPlayerRef = firebase.database().ref(`gameSession/${gameId}/sessionPlayers`);
     newPlayerRef.push().set({
       playerId: playerId
     });
+    
+
+
 
     //Updates local variable players with data every time players gets updated
     newPlayerRef.on("value", (snapshot) => {
@@ -166,6 +191,35 @@ joinGameBtn.addEventListener("click", function() {
 
     //Fires whenever a change occurs to playerCount for current game session
     playerCountRef.on("value", (snapshot) => {
+      para4.innerHTML = ''
+      newPlayerRef.get().then(function() {
+        return  newPlayerRef.once("value");
+      }).then(function(snapshot) {
+        let current = snapshot.val(); 
+        let iteration = 1
+        Object.keys(current).forEach((key) => {
+          let id = firebase.database().ref(`gameSession/${gameId}/sessionPlayers/${key}/playerId/`)
+          
+          //With the player ID, access the players name
+          console.log(iteration)
+          iteration += 1
+          id.get().then(function() {
+            return id.once("value");
+          }).then(function(snapshot) {
+            let playerId = snapshot.val();
+            let nameRef = firebase.database().ref(`players/${playerId}/name/`)
+            
+            nameRef.get().then(function() {
+              return nameRef.once("value");
+            }).then(function(snapshot) {
+              let name = snapshot.val();
+              var para6 = document.createElement("li")
+              para6.innerHTML = name
+              document.getElementById("playerList").appendChild(para6)
+            });
+          });
+        }); 
+        });
       //Update game host's playerCount
       let playerCountEl = document.getElementById("player-count-host")
 
@@ -202,27 +256,7 @@ joinGameBtn.addEventListener("click", function() {
       }
     })
 
-    //Show key to game session creator and hide button that created game
-    document.getElementById('create-game').style.display = "none";
-    let showCreated = document.getElementById("create-game-id-created");
-    //Initialize text to show game creator
-    const para1 = document.createElement("p");
-    const para2 = document.createElement("p");
-    const para3 = document.createElement("p");
-    para3.setAttribute("id", "player-count-host"); //ID needs to be set for playerCount change event listener
-    para1.innerHTML = "Game Session ID is: " + gameId;
-    para2.innerHTML = "Share your game session ID to three other players. Once all four are connected the game will start.";
-    para3.innerHTML = "Player Count: 1";
-    const para4 = document.createElement("ol");
-    const para5 = document.createElement("li");
-    para5.innerHTML = username
-    showCreated.appendChild(para1);
-    showCreated.appendChild(para2);
-    showCreated.appendChild(para3);
-    showCreated.appendChild(para4);
-    para4.append(para5)
-    //Show the three paragraphs
-    showCreated.style.display = "block";
+
 
   });
 
@@ -255,11 +289,12 @@ joinGameBtn.addEventListener("click", function() {
       })
 
       const para2 = document.createElement("ol");
+      para2.setAttribute('id', 'playerList')
       document.getElementById("join-game").appendChild(para2);
 
       //Fires whenever a change occurs to playerCount for current game session
       playerCountRef.on("value", (snapshot) => {  
-        
+        // Get the value of the game session players, to get their player ID
         gameSessionJoinRef.get().then(function() {
           return  gameSessionJoinRef.once("value");
         }).then(function(snapshot) {
@@ -267,7 +302,8 @@ joinGameBtn.addEventListener("click", function() {
           let iteration = 1
           Object.keys(current).forEach((key) => {
             let id = firebase.database().ref(`gameSession/${gameID}/sessionPlayers/${key}/playerId/`)
-            //
+            
+            //With the player ID, access the players name
             console.log(iteration)
             iteration += 1
             id.get().then(function() {
@@ -280,7 +316,9 @@ joinGameBtn.addEventListener("click", function() {
                 return nameRef.once("value");
               }).then(function(snapshot) {
                 let name = snapshot.val();
-                console.log(name)                
+                var para3 = document.createElement("li")
+                para3.innerHTML = name
+                document.getElementById("playerList").appendChild(para3)
               });
             });
           }); 
