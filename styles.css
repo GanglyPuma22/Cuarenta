@@ -97,6 +97,7 @@
   .joinGame {top: 40%;}
   .createGame {background-color: #008CBA;} /* Blue */
   .createGameSession {background-color: rebeccapurple;}
+  .joinGameSession {background-color: rebeccapurple;}
 
 .input {
     width: 25vw;

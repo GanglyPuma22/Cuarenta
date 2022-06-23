@@ -82,10 +82,13 @@
         <button class="button joinGame" name = "join">Join a Game</button>
       </div>
       <div id = "join-game"> 
-        <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
-        <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
-        <p class="p join-session-name"> Enter your name: </p>
-        <input class="input join-session-name" name="join-name" maxlength="30" type="text"/>
+        <div id = 'pre-join'>
+          <p class="p join-session-name"> Enter your name: </p>
+          <input class="input join-session-name" name="join-name" maxlength="30" type="text"/>
+          <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
+          <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
+          <button class="button joinGameSession" name = "join-session"> Join Game </button> 
+        </div>
       </div>
       <div id = "create-game">
         <p class="p created-session-id"> Create Game Session: </p>

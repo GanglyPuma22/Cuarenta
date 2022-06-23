@@ -18,7 +18,9 @@ charactersLength));
 const createGameBtn = document.querySelector("button[name='create']");
 const joinGameBtn = document.querySelector("button[name='join']");
 const gameSessionBtn = document.querySelector("button[name='create-session'");
+const joinSessionBtn = document.querySelector("button[name='join-session'");
 const joinSessionInp = document.querySelector("input[name='join-session'");
+
 
 //Show option to create a game
 createGameBtn.addEventListener("click", function() {
@@ -164,7 +166,9 @@ joinGameBtn.addEventListener("click", function() {
     //Fires whenever a change occurs to playerCount for current game session
     playerCountRef.on("value", (snapshot) => {
       //Update game host's playerCount
-      let playerCountEl = document.getElementById("player-count-host");
+      let playerCountEl = document.getElementById("player-count-host")
+
+      
       if (playerCountEl && snapshot.val() < 5) { //Check not null and player count no more than 5
         playerCountEl.innerHTML = "   Player Count: " + snapshot.val();
       }
@@ -208,22 +212,27 @@ joinGameBtn.addEventListener("click", function() {
     para1.innerHTML = "Game Session ID is: " + gameId;
     para2.innerHTML = "Share your game session ID to three other players. Once all four are connected the game will start.";
     para3.innerHTML = "Player Count: 1";
+    const para4 = document.createElement("ol");
+    const para5 = document.createElement("li");
+    para5.innerHTML = username
     showCreated.appendChild(para1);
     showCreated.appendChild(para2);
     showCreated.appendChild(para3);
+    showCreated.appendChild(para4);
+    para4.append(para5)
     //Show the three paragraphs
     showCreated.style.display = "block";
 
   });
 
-  joinSessionInp.addEventListener("change", function() {
+  joinSessionBtn.addEventListener("click", function() {
     //TODO Improve how we determine the sessionID is valid, right now it just makes sure its the right length for 1
+    
     if (joinSessionInp.value.length == 20) {
       //let sessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
       gameSessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
       let gameSessionJoinRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/sessionPlayers');
       let playerCountRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/playerCount');
-
 
       //Display text for user
       const para1 = document.createElement("p");
@@ -234,14 +243,20 @@ joinGameBtn.addEventListener("click", function() {
       document.getElementById("join-game").appendChild(para1);
       document.getElementById("join-game").appendChild(playerCountParaEl);
 
+      document.getElementById("pre-join").style.display = "none"
+
       let username = document.querySelector("input[name='join-name'").value
       console.log(username)
       playerRef.update({
         name: username
       })
 
+      const para2 = document.createElement("ol");
+      document.getElementById("join-game").appendChild(para2);
+
       //Fires whenever a change occurs to playerCount for current game session
-      playerCountRef.on("value", (snapshot) => {
+      playerCountRef.on("value", (snapshot) => {  
+
         //Update joining user's playerCount
         let playerCountEl = document.getElementById("player-count-member");
         if (playerCountEl && snapshot.val() < 5) { //Check not null and player count at most 4
