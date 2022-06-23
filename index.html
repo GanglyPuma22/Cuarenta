@@ -55,14 +55,11 @@
             imgPos = targ.getBoundingClientRect();
             console.log(imgPos.top);
             console.log(imgPos.left);
-            //console.log(targ.style.left);
-            //console.log(targ.style.top);
             console.log(position.top);
             console.log(position.left);
             console.log("+++++++++++++++++++");
-            if ((parseFloat(imgPos.left) > parseFloat(board.left) && parseFloat(imgPos.left) < parseFloat(board.left) + (parseFloat(board.width) - parseFloat(imPos.width))) &&
-                 (parseFloat(imgPos.top) > parseFloat(board.top) && parseFloat(img.top) < parseFloat(board.top) + (parseFloat(board.height) - imgPos.height))) {
-            //if (parseFloat(targ.style.top) + parseFloat(position.height) + parseFloat(targ.height)/2 > 0) {
+            if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
+                 (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
               drag = false;
             } else {
               targ.style.left = startingX;
@@ -85,11 +82,18 @@
         <button class="button joinGame" name = "join">Join a Game</button>
       </div>
       <div id = "join-game"> 
-        <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
-        <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
+        <div id = 'pre-join'>
+          <p class="p join-session-name"> Enter your name: </p>
+          <input class="input join-session-name" name="join-name" maxlength="30" type="text"/>
+          <p class="p join-session-id"> Enter the game session id provided to you by the game host: </p>
+          <input class="input join-session-id" name="join-session" maxlength="30" type="text"/>
+          <button class="button joinGameSession" name = "join-session"> Join Game </button> 
+        </div>
       </div>
       <div id = "create-game">
         <p class="p created-session-id"> Create Game Session: </p>
+        <p class="p create-session-name"> Enter your name: </p>
+        <input class="input create-session-name" name="create-name" maxlength="30" type="text"/>
         <button class="button createGameSession" name = "create-session"> Create Game </button> 
       </div>
       <div id = "create-game-id-created">

@@ -97,20 +97,26 @@
   .joinGame {top: 40%;}
   .createGame {background-color: #008CBA;} /* Blue */
   .createGameSession {background-color: rebeccapurple;}
+  .joinGameSession {background-color: rebeccapurple;}
 
 .input {
     width: 25vw;
     height: 20px;
 }
  .join-session-id {margin-left : 5%;}
+ .join-session-name {margin-left : 5%;}
+
 
 .p {
     color: black;
 }
  .join-session-id {margin-left : 5%;} 
+ .join-session-name {margin-left : 5%;} 
  .created-session-id {top: 40%;}
  .created-session-id {left: 25%;}
  .created-session-id {position: relative;}
+ .create-session-name {left: 25%;}
+ .create-session-name {position: relative;}
 
 .card {
     margin: 0 auto;
