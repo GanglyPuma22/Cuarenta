@@ -177,9 +177,6 @@ joinGameBtn.addEventListener("click", function() {
       playerId: playerId
     });
     
-
-
-
     //Updates local variable players with data every time players gets updated
     newPlayerRef.on("value", (snapshot) => {
       //Fires whenever a change occurs
@@ -291,7 +288,7 @@ joinGameBtn.addEventListener("click", function() {
       const para2 = document.createElement("ol");
       para2.setAttribute('id', 'playerList')
       document.getElementById("join-game").appendChild(para2);
-
+      
       //Fires whenever a change occurs to playerCount for current game session
       playerCountRef.on("value", (snapshot) => {  
         // Get the value of the game session players, to get their player ID
@@ -409,7 +406,6 @@ const CARD_VALUE_MAP = {
    "A": 14
 }
 
-
 function showCards(playerdeck) {
   const userHandDiv = document.querySelector(".user-hand");
   //let counter = 0;
@@ -427,7 +423,3 @@ function showCards(playerdeck) {
 
  userHandDiv.style.display = "block";
 }
-
-
-
-
