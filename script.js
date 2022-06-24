@@ -33,12 +33,17 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
   let deck3;
   let deck4;
 
-  let board;
+  let board = {};
 
   let playerHand; //database does not need player hand info
 
   //Function initiates watching variables changes for both host and members
   function initRefs() {
+
+    //Update local board var when board value changes
+    gameSessionRef.child('board').on("value", (snapshot) => {
+      board = snapshot.val() || {};
+    });
 
     //Updates local var playerTurnID everytime it gets updates in db
     gameSessionRef.child('currentPlayer').on("value", (snapshot) => {
@@ -70,6 +75,7 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
         console.log(playerCards);
       }
     });
+
   }
   
   //Show option to create a game session for host
@@ -85,7 +91,8 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     //Create game session
     gameSessionRef.set({
       id: gameId,
-      playerCount: 1
+      playerCount: 1,
+      currentPlayer: playerId //game host starts game
     });
 
     //Show key to game session creator and hide button that created game
@@ -119,15 +126,35 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
         oldList.remove(); //Remove old list
       }
       
-      const para2 = document.createElement("ol");
-      para2.setAttribute('id', 'playerList')
-      showCreated.appendChild(para2); //Add new List
+      const para2 = document.createElement("table");
+      para2.setAttribute('id', 'playerList');
+      showCreated.appendChild(para2); //Add new Table
 
       Object.keys(players).forEach((key) => { //Fill list with player names
-        let para = document.createElement("li")
-        para.innerHTML = players[key].name;
-        para2.appendChild(para)
+        let row = document.createElement("tr")
+        let value = document.createElement("td")
+        row.appendChild(value);
+        value.innerHTML = players[key].name;
+        para2.appendChild(row);
       });
+
+      if (para2.hasChildNodes()) {
+        console.log("Para 2 has chldren");
+        para2.childNodes.forEach((child) => {
+          console.log(child);
+          child.addEventListener('click', function() {
+            if (child.getAttribute('style') == '') {
+              console.log('no color');
+              child.setAttribute('style', 'background-color:red');
+            } else if (child.getAttribute('style') == 'background-color:red') {
+              child.setAttribute('style', 'background-color:blue');
+            } else {
+              child.setAttribute("style", "");
+            }
+          });
+        });
+      }
+      
 
       //Update game host's playerCount
       let playerCountEl = document.getElementById("player-count-host")
