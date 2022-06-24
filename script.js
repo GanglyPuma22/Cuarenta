@@ -2,43 +2,9 @@ import Card from "./card.js";
 import Deck from "./deck.js"
 import { freshDeck } from "./deck.js";
 
-
-
-function makeid(length) {
-  var result           = '';
-  var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  var charactersLength = characters.length;
-  for ( var i = 0; i < length; i++ ) {
-    result += characters.charAt(Math.floor(Math.random() * 
-charactersLength));
- }
- return result;
-}
-
-const createGameBtn = document.querySelector("button[name='create']");
-const joinGameBtn = document.querySelector("button[name='join']");
 const gameSessionBtn = document.querySelector("button[name='create-session'");
 const joinSessionBtn = document.querySelector("button[name='join-session'");
 const joinSessionInp = document.querySelector("input[name='join-session'");
-
-
-
-//Show option to create a game
-createGameBtn.addEventListener("click", function() {
-  console.log("hello");
-  document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("create-game").style.display = "block";
-  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  //showCards(player1);
-});
-
-//Show option to join a game
-joinGameBtn.addEventListener("click", function() {
-  document.getElementById("choose-game-creation-option").style.display = "none";
-  document.getElementById("join-game").style.display = "block";
-  //document.getElementsByClassName("user-hand").item(0).style.display = "block";
-  //showCards(player1);
-});
 
 (function () {
   //Database vars
@@ -70,31 +36,6 @@ joinGameBtn.addEventListener("click", function() {
   let board;
 
   let playerHand; //database does not need player hand info
-
-  function createTeams() {
-    let counter = 0;
-    Object.keys(players).forEach((key) => {
-      //console.log(players[key].playerId);
-      if (counter == 0) { 
-        team1.player1 = players[key];
-        team1.player1.cards = deck1.getCards();
-        counter++;
-      } else if (counter == 1) {
-        team1.player2 = players[key];
-        team1.player2.cards = deck2.getCards();
-        counter++;
-      } else if (counter == 2) {
-        team2.player1 = players[key];
-        team2.player1.cards = deck3.getCards();
-        counter++;
-      } else if (counter == 3) {
-        team2.player2 = players[key];
-        team2.player2.cards = deck4.getCards();
-        counter++;
-      } 
-    });
-  }
-
 
   //Function initiates watching variables changes for both host and members
   function initRefs() {
@@ -129,17 +70,14 @@ joinGameBtn.addEventListener("click", function() {
         console.log(playerCards);
       }
     });
-
   }
   
   //Show option to create a game session for host
   gameSessionBtn.addEventListener("click", function() {
     var gameId = makeid(20);
     gameSessionRef = firebase.database().ref('gameSession/'+gameId);
-    //deckRef = firebase.database().ref('gameSession/'+gameId+'/deck');
-
+    gameSessionRef.onDisconnect().remove();
     let username = document.querySelector("input[name='create-name'").value
-    console.log(username)
     playerRef.update({
       name: username
     })
@@ -149,41 +87,25 @@ joinGameBtn.addEventListener("click", function() {
       id: gameId,
       playerCount: 1
     });
+
     //Show key to game session creator and hide button that created game
     document.getElementById('create-game').style.display = "none";
     let showCreated = document.getElementById("create-game-id-created");
-    //Initialize text to show game creator
-    const para1 = document.createElement("p");
-    const para2 = document.createElement("p");
-    const para3 = document.createElement("p");
-    para3.setAttribute("id", "player-count-host"); //ID needs to be set for playerCount change event listener
-    para1.innerHTML = "Game Session ID is: " + gameId;
-    para2.innerHTML = "Share your game session ID to three other players. Once all four are connected the game will start.";
-    para3.innerHTML = "Player Count: 1";
-    const para4 = document.createElement("ol");
-    const para5 = document.createElement("li");
-    para5.innerHTML = username
-    para4.setAttribute("id","playerList")
-    showCreated.appendChild(para1);
-    showCreated.appendChild(para2);
-    showCreated.appendChild(para3);
-    showCreated.appendChild(para4);
-    para4.append(para5)
+    document.getElementById('game-id-host').innerHTML = "Game Session ID is: " + gameId;
+
     //Show the three paragraphs
     showCreated.style.display = "block";
+
     //Add player to game session's players
     let newPlayerRef = firebase.database().ref(`gameSession/${gameId}/sessionPlayers`);
-    newPlayerRef.push().set({
-      playerId: playerId
+    newPlayerRef.child(playerId).set({
+      playerId: playerId,
+      name: username
     });
-    
-
-
 
     //Updates local variable players with data every time players gets updated
     newPlayerRef.on("value", (snapshot) => {
-      //Fires whenever a change occurs
-      players = snapshot.val() || {};
+      players = snapshot.val() || {}; //Fires whenever a change occurs
     })
 
     //Get current game session player count data
@@ -191,43 +113,29 @@ joinGameBtn.addEventListener("click", function() {
 
     //Fires whenever a change occurs to playerCount for current game session
     playerCountRef.on("value", (snapshot) => {
-      para4.innerHTML = ''
-      newPlayerRef.get().then(function() {
-        return  newPlayerRef.once("value");
-      }).then(function(snapshot) {
-        let current = snapshot.val(); 
-        let iteration = 1
-        Object.keys(current).forEach((key) => {
-          let id = firebase.database().ref(`gameSession/${gameId}/sessionPlayers/${key}/playerId/`)
-          
-          //With the player ID, access the players name
-          console.log(iteration)
-          iteration += 1
-          id.get().then(function() {
-            return id.once("value");
-          }).then(function(snapshot) {
-            let playerId = snapshot.val();
-            let nameRef = firebase.database().ref(`players/${playerId}/name/`)
-            
-            nameRef.get().then(function() {
-              return nameRef.once("value");
-            }).then(function(snapshot) {
-              let name = snapshot.val();
-              var para6 = document.createElement("li")
-              para6.innerHTML = name
-              document.getElementById("playerList").appendChild(para6)
-            });
-          });
-        }); 
-        });
+
+      let oldList = document.getElementById('playerList');
+      if (oldList) {
+        oldList.remove(); //Remove old list
+      }
+      
+      const para2 = document.createElement("ol");
+      para2.setAttribute('id', 'playerList')
+      showCreated.appendChild(para2); //Add new List
+
+      Object.keys(players).forEach((key) => { //Fill list with player names
+        let para = document.createElement("li")
+        para.innerHTML = players[key].name;
+        para2.appendChild(para)
+      });
+
       //Update game host's playerCount
       let playerCountEl = document.getElementById("player-count-host")
 
-      
       if (playerCountEl && snapshot.val() < 5) { //Check not null and player count no more than 5
         playerCountEl.innerHTML = "   Player Count: " + snapshot.val();
       }
-      if (snapshot.val() == playerLimit) {
+      if (snapshot.val() == playerLimit) { //Start game conditions met
         console.log("START GAME");
         deck1 = new Deck([]);
         deck2 = new Deck([]);
@@ -252,11 +160,11 @@ joinGameBtn.addEventListener("click", function() {
         //Hide game host and show user hand and cards
         document.getElementById("game-host").style.display = "none";
         showCards(playerCards);
+        document.querySelector('.user-hand').children.onmousedown = startDrag; //set event listener for dragging cards
+        document.querySelector('.user-hand').children.onmouseup = stopDrag;
 
       }
     })
-
-
 
   });
 
@@ -266,81 +174,59 @@ joinGameBtn.addEventListener("click", function() {
     if (joinSessionInp.value.length == 20) {
       //let sessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
       let gameID = joinSessionInp.value
-      gameSessionRef = firebase.database().ref('gameSession/'+joinSessionInp.value);
-      let gameSessionJoinRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/sessionPlayers');
-      let playerCountRef = firebase.database().ref('gameSession/'+joinSessionInp.value+'/playerCount');
-      let playersRef = firebase.database().ref('players/')
+      gameSessionRef = firebase.database().ref('gameSession/'+ gameID);
+      let gameSessionJoinRef = firebase.database().ref('gameSession/'+ gameID +'/sessionPlayers');
+      let playerCountRef = firebase.database().ref('gameSession/'+ gameID +'/playerCount');
 
-      //Display text for user
-      const para1 = document.createElement("p");
-      const playerCountParaEl = document.createElement("p");
-      para1.innerHTML = "Successfully joined the game. Waiting on four players";
-      playerCountParaEl.innerHTML = "Player Count:";
-      playerCountParaEl.setAttribute("id", "player-count-member");
-      document.getElementById("join-game").appendChild(para1);
-      document.getElementById("join-game").appendChild(playerCountParaEl);
+      document.getElementById("pre-join").style.display = "none"; //Hide pre join inputs
+      document.getElementById("post-join").style.display = "block"; //Show post join information
 
-      document.getElementById("pre-join").style.display = "none"
-
-      let username = document.querySelector("input[name='join-name'").value
-      console.log(username)
+      let username = document.querySelector("input[name='join-name'").value;
       playerRef.update({
         name: username
-      })
+      });
 
-      const para2 = document.createElement("ol");
-      para2.setAttribute('id', 'playerList')
-      document.getElementById("join-game").appendChild(para2);
+      //Updates local variable players with data every time players gets updated
+      gameSessionJoinRef.on("value", (snapshot) => { //Fires whenever a change occurs
+        players = snapshot.val() || {};
+      });
 
       //Fires whenever a change occurs to playerCount for current game session
-      playerCountRef.on("value", (snapshot) => {  
-        // Get the value of the game session players, to get their player ID
-        gameSessionJoinRef.get().then(function() {
-          return  gameSessionJoinRef.once("value");
-        }).then(function(snapshot) {
-          let current = snapshot.val(); 
-          let iteration = 1
-          Object.keys(current).forEach((key) => {
-            let id = firebase.database().ref(`gameSession/${gameID}/sessionPlayers/${key}/playerId/`)
-            
-            //With the player ID, access the players name
-            console.log(iteration)
-            iteration += 1
-            id.get().then(function() {
-              return id.once("value");
-            }).then(function(snapshot) {
-              let playerId = snapshot.val();
-              let nameRef = firebase.database().ref(`players/${playerId}/name/`)
-              
-              nameRef.get().then(function() {
-                return nameRef.once("value");
-              }).then(function(snapshot) {
-                let name = snapshot.val();
-                var para3 = document.createElement("li")
-                para3.innerHTML = name
-                document.getElementById("playerList").appendChild(para3)
-              });
-            });
-          }); 
-          });
+      playerCountRef.on("value", (snapshot) => { 
+        let joinGameDiv = document.getElementById("post-join");
+        let oldList = document.getElementById('playerList');
+
+        if (oldList) {
+          oldList.remove(); //Remove old list
+        }
+        
+        const para2 = document.createElement("ol");
+        para2.setAttribute('id', 'playerList')
+        joinGameDiv.appendChild(para2); //Add new List
+
+        Object.keys(players).forEach((key) => { //Fill list with player names
+          let para = document.createElement("li")
+          para.innerHTML = players[key].name;
+          para2.appendChild(para)
+        });
         
         //Update joining user's playerCount
         let playerCountEl = document.getElementById("player-count-member");
         if (playerCountEl && snapshot.val() < 5) { //Check not null and player count at most 4
           playerCountEl.innerHTML = "Player Count: " + snapshot.val();
         }
+
         if (snapshot.val() == playerLimit) {
           console.log("START GAME");
           initRefs();
           //Hide game host and show user hand and cards
           document.getElementById("game-host").style.display = "none";
-          setTimeout(() => {  showCards(playerCards); }, 5000); //Give members time for database to sync with host
-  
-
-          //initGameMember();
-      }
-      })
-
+          setTimeout(() => {  showCards(playerCards);  }, 5000); //Give members time for database to sync with host
+          document.querySelector('.user-hand').children.onmousedown = startDrag; //Set event listener for dragging cards
+          document.querySelector('.user-hand').children.onmouseup = stopDrag;
+        }
+      });
+      
       //Resolve promise getting current player count data
       playerCountRef.get().then(function() {
         return playerCountRef.once("value");
@@ -349,9 +235,11 @@ joinGameBtn.addEventListener("click", function() {
       //If session isn't full add player to it
       if (currentPlayerCount < 4) {
         //Add this player to gameSession's players
-        gameSessionJoinRef.push().set({
-          playerId: playerId
+        gameSessionJoinRef.child(playerId).set({
+          playerId: playerId,
+          name: username
         });
+
         //Update player count
         gameSessionRef.update({
           playerCount: currentPlayerCount + 1
@@ -361,9 +249,34 @@ joinGameBtn.addEventListener("click", function() {
       }
       });
     }
-    // if (joinSessionInp.value == )
   });
 
+  /**
+   * HELPERS FOR INSIDE FIREBASE FUNCTION
+   */
+  function createTeams() {
+    let counter = 0;
+    Object.keys(players).forEach((key) => {
+      //console.log(players[key].playerId);
+      if (counter == 0) { 
+        team1.player1 = players[key];
+        team1.player1.cards = deck1.getCards();
+        counter++;
+      } else if (counter == 1) {
+        team1.player2 = players[key];
+        team1.player2.cards = deck2.getCards();
+        counter++;
+      } else if (counter == 2) {
+        team2.player1 = players[key];
+        team2.player1.cards = deck3.getCards();
+        counter++;
+      } else if (counter == 3) {
+        team2.player2 = players[key];
+        team2.player2.cards = deck4.getCards();
+        counter++;
+      } 
+    });
+  }
 
   //After login this function triggers
   firebase.auth().onAuthStateChanged((user) => {
@@ -379,17 +292,26 @@ joinGameBtn.addEventListener("click", function() {
 
       //Remove me from Firebase when I diconnect
       playerRef.onDisconnect().remove();
-      firebase.database().ref('gameSession').onDisconnect().remove();
     } else {
       //You're logged out.
     }
   })
 
+  function makeid(length) {
+    var result           = '';
+    var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var charactersLength = characters.length;
+    for ( var i = 0; i < length; i++ ) {
+      result += characters.charAt(Math.floor(Math.random() * 
+  charactersLength));
+   }
+   return result;
+  }
+
   //Auth error log 
   firebase.auth().signInAnonymously().catch((error) => {
     var errorCode = error.code;
     var errorMessage = error.message;
-    // ...
     console.log(errorCode, errorMessage);
   });
 
@@ -425,6 +347,76 @@ function showCards(playerdeck) {
 //  });
 
  userHandDiv.style.display = "block";
+}
+let startingX;
+let startingY;
+let offsetX;
+let offsetY;
+let coordX;
+let coordY;
+let drag;
+let targ;
+
+function startDrag(e) {
+  // determine event object
+  if (!e) {
+      var e = window.event;
+  }
+  if(e.preventDefault) e.preventDefault();
+
+  // IE uses srcElement, others use target
+  targ = e.target ? e.target : e.srcElement;
+
+  if (targ.className != 'card') {return};
+  // Save starting values of cards x y coords
+    startingX = targ.style.left;
+    startingY = targ.style.top;
+  // calculate event X, Y coordinates
+    offsetX = e.clientX;
+    offsetY = e.clientY;
+
+  // assign default values for top and left properties
+  if(!targ.style.left) { targ.style.left='0px'};
+  if (!targ.style.top) { targ.style.top='0px'};
+
+  // calculate integer values for top and left 
+  // properties
+  coordX = parseInt(targ.style.left);
+  coordY = parseInt(targ.style.top);
+  drag = true;
+
+  // move div element
+      document.onmousemove=dragDiv;
+  return false;
+
+}
+
+function dragDiv(e) {
+  if (!drag) {return};
+  if (!e) { var e= window.event};
+  // var targ=e.target?e.target:e.srcElement;
+  // move div element
+  targ.style.left=coordX+e.clientX-offsetX+'px';
+  targ.style.top=coordY+e.clientY-offsetY+'px';
+  return false;
+}
+
+function stopDrag() {
+  let position = document.getElementById('board').getBoundingClientRect();
+  let imgPos = targ.getBoundingClientRect();
+  // console.log(imgPos.top);
+  // console.log(imgPos.left);
+  // console.log(position.top);
+  // console.log(position.left);
+  // console.log("+++++++++++++++++++");
+  if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
+       (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
+    drag = false;
+  } else {
+    targ.style.left = startingX;
+    targ.style.top = startingY;
+    drag = false;
+  }
 }
 
 

@@ -40,6 +40,15 @@
     position: relative;
 }
 
+#post-join {
+    display: none;
+    margin: 0 auto;
+    position: absolute;
+    width: 45vw;
+    height: 70vh;
+    left: 30px;
+}
+
 #create-game {
     display: none;
     z-index: 3;
@@ -53,12 +62,14 @@
 #create-game-id-created {
     display: none;
     z-index: 3;
-    width: 50vw;
+    width: 45vw;
     height: 70vh;
     background-color: white;
     margin: 0 auto;
-    position: relative;
+    position: absolute;
+    left: 30px;
 }
+
 
 .user-hand {
     height: 25vh;
