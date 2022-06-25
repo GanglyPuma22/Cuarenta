@@ -8,7 +8,7 @@
   <title>Card Game</title>
   <script src="script.js" type="module"></script>
   <script type="module" src="listeners.js"> </script>
-  <script type="text/javascript">
+  <!-- <script type="text/javascript">
     function startDrag(e) {
             // determine event object
             if (!e) {
@@ -68,11 +68,11 @@
               drag = false;
             }
         }
-          document.querySelector('.user-hand').addEventListener("children", function() {
-            document.querySelector('.user-hand').children.onmousedown = startDrag;
-            document.querySelector('.user-hand').children.onmouseup = stopDrag;
-          });
-</script>
+          // document.querySelector('.user-hand').addEventListener("children", function() {
+          //   document.querySelector('.user-hand').children.onmousedown = startDrag;
+          //   document.querySelector('.user-hand').children.onmouseup = stopDrag;
+          // });
+</script> -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -92,7 +92,8 @@
         </div>
         <div id = 'post-join'>
           <p> Successfully joined the game! Waiting on four players.</p> 
-          <p id = player-count-member> Player Count: </p>
+          <p id = 'player-count-member'> Player Count: </p>
+          <p id = 'waiting-on-game' style = 'display: none'> Waiting on host to start the game</p>
         </div>
 
       </div>
@@ -109,6 +110,7 @@
         <h2 id = "players-host"> Players: </h2>
         <h3 style = "color: red"> Team 1</h3>
         <h3 style = "color: blue"> Team 2</h3>
+        <button id="start-game-btn"> Start Game </button>
       </div>
     </div>
     <div id="board"> 

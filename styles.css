@@ -85,6 +85,13 @@
     left: 30px;
 }
 
+#start-game-btn {
+    position: absolute;
+    width: fit-content;
+    left:50%;
+    top: 200px;
+    display: none;
+}
 
 .user-hand {
     height: 25vh;

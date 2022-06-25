@@ -92,7 +92,27 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     gameSessionRef.set({
       id: gameId,
       playerCount: 1,
+      gameState: 'lobby',
       currentPlayer: playerId //game host starts game
+    });
+
+    //Create event listener for start game btn
+    document.getElementById('start-game-btn').addEventListener('click', function() {
+      //Create teams, vars team1 and team2 store them in db
+      //Also sets up player cards
+      createTeams();
+      console.log(team1);
+      console.log(team2);
+      gameSessionRef.update({
+        team1: team1,
+        team2: team2,
+        gameState: 'started'
+      });
+
+      //Hide game host and show user hand and cards
+      document.getElementById("game-host").style.display = "none";
+      console.log(playerCards);
+      showCards(playerCards);
     });
 
     //Show key to game session creator and hide button that created game
@@ -134,6 +154,7 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
         let row = document.createElement("tr")
         let value = document.createElement("td")
         row.appendChild(value);
+        row.setAttribute('value', players[key].playerId);
         value.innerHTML = players[key].name;
         para2.appendChild(row);
       });
@@ -175,20 +196,8 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
 
        //create references
         initRefs();
-
-        //Create teams, vars team1 and team2 store them in db
-        //Also sets up player cards
-        createTeams();
-        gameSessionRef.update({
-          team1: team1,
-          team2: team2
-        });
-
-        //Hide game host and show user hand and cards
-        document.getElementById("game-host").style.display = "none";
-        showCards(playerCards);
-        document.querySelector('.user-hand').children.onmousedown = startDrag; //set event listener for dragging cards
-        document.querySelector('.user-hand').children.onmouseup = stopDrag;
+        
+        document.getElementById('start-game-btn').style.display = 'block';
 
       }
     })
@@ -212,6 +221,23 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
       playerRef.update({
         name: username
       });
+
+      //Create listener for game to start
+      gameSessionRef.child('gameState').on("value", (snapshot) => {
+        console.log('INSIDE GAME STATE');
+        console.log(snapshot.val());
+        if (snapshot.val() == 'started') {
+          console.log("START GAME");
+          //Hide game host and show user hand and cards
+          document.getElementById("game-host").style.display = "none";
+          //Setup database change events to be used later 
+          initRefs();
+          setTimeout(() => { showCards(playerCards);}, "4000") //Give members time for database to sync with host 
+        
+          document.querySelector('.user-hand').children.onmousedown = startDrag; //Set event listener for dragging cards
+          document.querySelector('.user-hand').children.onmouseup = stopDrag;
+        }
+      })
 
       //Updates local variable players with data every time players gets updated
       gameSessionJoinRef.on("value", (snapshot) => { //Fires whenever a change occurs
@@ -244,13 +270,7 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
         }
 
         if (snapshot.val() == playerLimit) {
-          console.log("START GAME");
-          initRefs();
-          //Hide game host and show user hand and cards
-          document.getElementById("game-host").style.display = "none";
-          setTimeout(() => {  showCards(playerCards);  }, 5000); //Give members time for database to sync with host
-          document.querySelector('.user-hand').children.onmousedown = startDrag; //Set event listener for dragging cards
-          document.querySelector('.user-hand').children.onmouseup = stopDrag;
+          document.getElementById('waiting-on-game').style.display = 'block';
         }
       });
       
@@ -282,26 +302,26 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
    * HELPERS FOR INSIDE FIREBASE FUNCTION
    */
   function createTeams() {
+    let table = document.getElementById('playerList');
     let counter = 0;
-    Object.keys(players).forEach((key) => {
-      //console.log(players[key].playerId);
-      if (counter == 0) { 
-        team1.player1 = players[key];
-        team1.player1.cards = deck1.getCards();
-        counter++;
-      } else if (counter == 1) {
-        team1.player2 = players[key];
-        team1.player2.cards = deck2.getCards();
-        counter++;
-      } else if (counter == 2) {
-        team2.player1 = players[key];
-        team2.player1.cards = deck3.getCards();
-        counter++;
-      } else if (counter == 3) {
-        team2.player2 = players[key];
-        team2.player2.cards = deck4.getCards();
-        counter++;
-      } 
+    table.childNodes.forEach((child) => { //Iterate over player table elements
+      if (child.getAttribute('style') == 'background-color:red') {
+        if (team1.player1) {
+          team1.player2 = players[child.getAttribute('value')];
+          team1.player2.cards = deck2.getCards();
+        } else {
+          team1.player1 = players[child.getAttribute('value')];
+          team1.player1.cards = deck1.getCards();
+        }
+      } else if (child.getAttribute('style') == 'background-color:blue') {
+        if (team2.player1) {
+          team2.player2 = players[child.getAttribute('value')];
+          team2.player2.cards = deck4.getCards();
+        } else {
+          team2.player1 = players[child.getAttribute('value')];
+          team2.player1.cards = deck3.getCards();
+        }
+      }
     });
   }
 
@@ -324,6 +344,13 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     }
   })
 
+  //Auth error log 
+  firebase.auth().signInAnonymously().catch((error) => {
+    var errorCode = error.code;
+    var errorMessage = error.message;
+    console.log(errorCode, errorMessage);
+  });
+
   function makeid(length) {
     var result           = '';
     var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -335,12 +362,100 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
    return result;
   }
 
-  //Auth error log 
-  firebase.auth().signInAnonymously().catch((error) => {
-    var errorCode = error.code;
-    var errorMessage = error.message;
-    console.log(errorCode, errorMessage);
-  });
+  function showCards(playerdeck) {
+    const userHandDiv = document.querySelector(".user-hand");
+    //let counter = 0;
+    for (let i = 0; i < 5; i++) {
+      let card = new Card(playerdeck[i].suit, playerdeck[i].value);
+      let image = card.createHTML();
+      image.onmousedown = startDrag;
+      image.onmouseup = stopDrag;
+      userHandDiv.appendChild(image);
+    }
+   userHandDiv.style.display = "block";
+  }
+  
+  
+  let startingX;
+  let startingY;
+  let offsetX;
+  let offsetY;
+  let coordX;
+  let coordY;
+  let drag;
+  let targ;
+  
+  function startDrag(e) {
+    console.log(e);
+    // determine event object
+    if (!e) {
+        var e = window.event;
+    }
+    if(e.preventDefault) e.preventDefault();
+  
+    // IE uses srcElement, others use target
+    targ = e.target ? e.target : e.srcElement;
+  
+    if (targ.className != 'card') {return};
+    // Save starting values of cards x y coords
+      startingX = targ.style.left;
+      startingY = targ.style.top;
+    // calculate event X, Y coordinates
+      offsetX = e.clientX;
+      offsetY = e.clientY;
+  
+    // assign default values for top and left properties
+    if(!targ.style.left) { targ.style.left='0px'};
+    if (!targ.style.top) { targ.style.top='0px'};
+  
+    // calculate integer values for top and left 
+    // properties
+    coordX = parseInt(targ.style.left);
+    coordY = parseInt(targ.style.top);
+    drag = true;
+  
+    // move div element
+        document.onmousemove=dragDiv;
+    return false;
+  
+  }
+  
+  function dragDiv(e) {
+    if (!drag) {return};
+    if (!e) { var e= window.event};
+    // var targ=e.target?e.target:e.srcElement;
+    // move div element
+    targ.style.left=coordX+e.clientX-offsetX+'px';
+    targ.style.top=coordY+e.clientY-offsetY+'px';
+    return false;
+  }
+  
+  function stopDrag() {
+    if (playerTurnID == playerId) {
+      let position = document.getElementById('board').getBoundingClientRect();
+      let imgPos = targ.getBoundingClientRect();
+  
+      if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
+          (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
+          drag = false;
+          board.testFields = 'success';
+          //Add card to board in firebase
+          gameSessionRef.child('board').update(board);
+  
+      } else {
+        targ.style.left = startingX;
+        targ.style.top = startingY;
+        drag = false;
+      }
+  
+    } else {
+      targ.style.left = startingX;
+      targ.style.top = startingY;
+      drag = false;
+    }
+  }
+
+  
 
 })();
 
@@ -358,93 +473,7 @@ const CARD_VALUE_MAP = {
 }
 
 
-function showCards(playerdeck) {
-  const userHandDiv = document.querySelector(".user-hand");
-  //let counter = 0;
-  for (let i = 0; i < 5; i++) {
-    let card = new Card(playerdeck[i].suit, playerdeck[i].value);
-    userHandDiv.appendChild(card.createHTML());
-  }
-//  Object.keys(playerdeck).forEach((key) => {
-//   console.log(key);
-//   if (counter < 5) {
-//     userHandDiv.appendChild(playerdeck[key].createHTML());
-//   }
-//   counter++;
-//  });
 
- userHandDiv.style.display = "block";
-}
-let startingX;
-let startingY;
-let offsetX;
-let offsetY;
-let coordX;
-let coordY;
-let drag;
-let targ;
-
-function startDrag(e) {
-  // determine event object
-  if (!e) {
-      var e = window.event;
-  }
-  if(e.preventDefault) e.preventDefault();
-
-  // IE uses srcElement, others use target
-  targ = e.target ? e.target : e.srcElement;
-
-  if (targ.className != 'card') {return};
-  // Save starting values of cards x y coords
-    startingX = targ.style.left;
-    startingY = targ.style.top;
-  // calculate event X, Y coordinates
-    offsetX = e.clientX;
-    offsetY = e.clientY;
-
-  // assign default values for top and left properties
-  if(!targ.style.left) { targ.style.left='0px'};
-  if (!targ.style.top) { targ.style.top='0px'};
-
-  // calculate integer values for top and left 
-  // properties
-  coordX = parseInt(targ.style.left);
-  coordY = parseInt(targ.style.top);
-  drag = true;
-
-  // move div element
-      document.onmousemove=dragDiv;
-  return false;
-
-}
-
-function dragDiv(e) {
-  if (!drag) {return};
-  if (!e) { var e= window.event};
-  // var targ=e.target?e.target:e.srcElement;
-  // move div element
-  targ.style.left=coordX+e.clientX-offsetX+'px';
-  targ.style.top=coordY+e.clientY-offsetY+'px';
-  return false;
-}
-
-function stopDrag() {
-  let position = document.getElementById('board').getBoundingClientRect();
-  let imgPos = targ.getBoundingClientRect();
-  // console.log(imgPos.top);
-  // console.log(imgPos.left);
-  // console.log(position.top);
-  // console.log(position.left);
-  // console.log("+++++++++++++++++++");
-  if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
-       (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
-    drag = false;
-  } else {
-    targ.style.left = startingX;
-    targ.style.top = startingY;
-    drag = false;
-  }
-}
 
 
 
