@@ -98,10 +98,10 @@
     width: 50vw;
     background-color: white;
     position: relative;
-    top: 100%;
+    top: 75%;
     margin: 0 auto;
-    border-top:3px solid black;
     display: none;
+    z-index: 5;
     
 }
 
@@ -160,4 +160,8 @@
     left: 1%;
     padding-inline: 2px;
     display: inline-block;
+}
+
+.board-card {
+    position: absolute;
 }

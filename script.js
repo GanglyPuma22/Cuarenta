@@ -33,16 +33,44 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
   let deck3;
   let deck4;
 
-  let board = {};
-
-  let playerHand; //database does not need player hand info
+  let board = []; //Initialize board array that will store databse board info
 
   //Function initiates watching variables changes for both host and members
   function initRefs() {
 
     //Update local board var when board value changes
     gameSessionRef.child('board').on("value", (snapshot) => {
-      board = snapshot.val() || {};
+      board = snapshot.val() || [];
+      //Draw cards for all players
+      //if (playerId != playerTurnID) {
+      let boardEl = document.getElementById('board');
+      //Remove html children on board
+      boardEl.childNodes.forEach((card) => {
+        boardEl.removeChild(card);
+      });
+      
+      //Redraw them
+      for (let i = 0; i < board.length; i++) {
+        let tempCard = new Card(board[i].suit, board[i].value);
+        let imgEl = tempCard.createHTML();
+        imgEl.style.left = board[i].x;
+        imgEl.style.top = board[i].y;
+        imgEl.style.height = '45%';
+        imgEl.style.width = '19%';
+        imgEl.setAttribute('class', 'board-card');
+        if (i == board.length - 1) { //Last card in board array is last card played
+          imgEl.style.border = '5px solid green';
+          imgEl.style.borderRadius = '20px';
+        }
+        imgEl.setAttribute('intersected', 'false');
+        // imgEl.ondragenter = handleCardEnter;
+        // imgEl.ondragleave = handleCardLeave;
+        // imgEl.ondragover = handleDrag;
+        boardEl.appendChild(imgEl);
+        
+        //imgEl.position = 'absolute';
+      }
+      //}
     });
 
     //Updates local var playerTurnID everytime it gets updates in db
@@ -53,26 +81,24 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     //Next two refs check for team1 and team2 value to be set and set playerCards to be current player's cards from database
     gameSessionRef.child('team1').on("value", (snapshot) => {
       if (snapshot.val()) {
+        team1 = snapshot.val();
         let teamVar = snapshot.val() || {};
         if (teamVar.player1.playerId == playerId) {
           playerCards = teamVar.player1.cards;
         } else if (teamVar.player2.playerId == playerId) {
           playerCards = teamVar.player2.cards;
         }
-        console.log("player cards are: ")
-        console.log(playerCards);
       }
     });
     gameSessionRef.child('team2').on("value", (snapshot) => {
       if (snapshot.val()) {
+        team2 = snapshot.val();
         let teamVar = snapshot.val() || {};
         if (teamVar.player1.playerId == playerId) {
           playerCards = teamVar.player1.cards;
         } else if (teamVar.player2.playerId == playerId) {
           playerCards = teamVar.player2.cards;
         }
-        console.log("player cards are: ")
-        console.log(playerCards);
       }
     });
 
@@ -370,11 +396,114 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
       let image = card.createHTML();
       image.onmousedown = startDrag;
       image.onmouseup = stopDrag;
+      image.draggable = 'true';
       userHandDiv.appendChild(image);
     }
    userHandDiv.style.display = "block";
   }
-  
+
+  //Remove card from hand when dragged onto board by player
+  //Return that card so we cann add it to board and update db
+  function updateHand(id) {
+    for (let i = 0; i < Object.keys(playerCards).length; i++) {
+      if (playerCards[i] != null) { //Make sure card was not already removed before accessing it 
+        if (playerCards[i].suit == id.charAt(0) && playerCards[i].value == id.charAt(1)) { //If suit and value match
+          console.log('card matched');
+          delete playerCards[i];
+        }
+      }  
+    }
+  }
+
+  function percentToPixel(percentVal, dimension) {
+    return Math.round(dimension * parseInt(percentVal)/100, 1).toString() + 'px';
+  }
+
+  function pixelsToPercent(pixelVal, dimension) {
+    return Math.round(100 * parseInt(pixelVal)/dimension, 1).toString() + '%';
+  }
+
+  function getNextPlayer() {
+    if (playerTurnID == team1.player1.playerId) {
+      return team2.player1.playerId;
+    } else if (playerTurnID == team1.player2.playerId) {
+      return team2.player2.playerId;
+    } else if (playerTurnID == team2.player1.playerId) {
+      return team1.player2.playerId;
+    } else if (playerTurnID == team2.player2.playerId) {
+      return team1.player1.playerId;
+    }
+  }
+
+  function handleDrag(event) {
+    event.preventDefault();
+    console.log(event);
+    if (!event.target.classList.contains('.board-card')) {
+        console.log('OVERLAPPING!');  
+    } 
+  }
+
+  function handleCardEnter(e) {
+    console.log('Entered Card');
+    console.log(e);
+    e.preventDefault();
+    let cardId = e.path[0].attributes[2].value; //Get card that was dragged onto
+    let cardEl = document.getElementById(cardId);
+    cardEl.setAttribute('intersected', 'true');
+  }
+
+  function handleCardLeave(e) {
+    console.log('Left Card');
+    console.log(e);
+    e.preventDefault()
+    let cardId = e.path[0].attributes[2].value; //Get card that was dragged onto
+    let cardEl = document.getElementById(cardId);
+    cardEl.setAttribute('intersected', 'false');
+  }
+
+  function findIntersected(draggedCard) {
+    console.log(draggedCard);
+    let draggedCardX = parseInt(draggedCard.x.replace('%',''));
+    let draggedCardY = parseInt(draggedCard.y.replace('%',''));
+
+    document.getElementById('board').childNodes.forEach(card => {
+      console.log(card);
+      console.log('Top: ' + parseInt(card.style.top));
+      console.log('Left: ' + parseInt(card.style.left));
+      console.log('X: ' + parseInt(draggedCard.x.replace('%', '')));
+      console.log('Y: ' + parseInt(draggedCard.y.replace('%', '')));
+
+      //let cardLeft = parseInt(card.style.left);
+      //let cardTop = parseInt(card.style.top);
+
+      //console.log('Check1: ' + parseInt(card.style.left) < parseInt(draggedCard.x.replace('%','')));
+      //console.log('Check2: ' +parseInt(card.style.left) + parseInt(card.style.width) > parseInt(draggedCard.x.replace('%','')));
+      //console.log( 'Check3: ' + parseInt(card.style.top) < parseInt(draggedCard.y.replace('%','')));
+      //console.log( 'Check4: ' + parseInt(card.style.top) + parseInt(card.style.height) > parseInt(draggedCard.y.replace('%','')));
+      if (areIntersecting(card, draggedCard)) {
+        return card
+      }
+      // if (parseInt(card.style.left) < parseInt(draggedCard.x.replace('%','')) && parseInt(card.style.left) + parseInt(card.style.width) > parseInt(draggedCard.x.replace('%','')) && parseInt(card.style.top) < parseInt(draggedCard.y.replace('%','')) && 
+      // parseInt(card.style.top) + parseInt(card.style.height) > parseInt(draggedCard.y.replace('%',''))) {
+      //   return card;
+      // }
+    });
+    return null;
+  }
+
+  function areIntersecting(card, draggedCard) {
+    let cardLeft = parseInt(card.style.left);
+    let cardTop = parseInt(card.style.top);
+    let cardWidth = parseInt(card.style.width);
+    let cardHeight = parseInt(card.style.height);
+    let draggedX = parseInt(draggedCard.x.replace('%', ''));
+    let draggedY = parseInt(draggedCard.y.replace('%', ''));
+
+    return cardLeft < draggedX && cardLeft + cardWidth > draggedX && cardTop < draggedY && cardTop + cardHeight > draggedY || //card dragged to bottom right of current
+           draggedX < cardLeft && draggedX + cardWidth > cardLeft && draggedY > cardTop && cardTop + cardHeight > draggedY || //card dragged to bottom left of current
+           draggedX < cardLeft && draggedX + cardWidth > cardLeft && draggedY < cardTop && draggedY + cardHeight > cardTop || //card dragged to top left of current
+           cardLeft < draggedX && cardLeft + cardWidth > draggedX &&  draggedY < cardTop && draggedY + cardHeight > cardTop //card dragged to top right of current
+  }
   
   let startingX;
   let startingY;
@@ -384,25 +513,28 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
   let coordY;
   let drag;
   let targ;
-  
+
   function startDrag(e) {
     console.log(e);
     // determine event object
     if (!e) {
         var e = window.event;
     }
+
     if(e.preventDefault) e.preventDefault();
   
     // IE uses srcElement, others use target
     targ = e.target ? e.target : e.srcElement;
-  
-    if (targ.className != 'card') {return};
-    // Save starting values of cards x y coords
-      startingX = targ.style.left;
-      startingY = targ.style.top;
-    // calculate event X, Y coordinates
-      offsetX = e.clientX;
-      offsetY = e.clientY;
+    console.log(targ);
+
+    if (targ.className != 'card' && targ.className != 'board-card') {return};
+    // Save starting values of cards x y coords relative to .user-hand div
+    startingX = targ.style.left;
+    startingY = targ.style.top;
+
+    // calculate event X, Y coordinates relative to page
+    offsetX = e.clientX;
+    offsetY = e.clientY;
   
     // assign default values for top and left properties
     if(!targ.style.left) { targ.style.left='0px'};
@@ -412,6 +544,28 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     // properties
     coordX = parseInt(targ.style.left);
     coordY = parseInt(targ.style.top);
+    console.log('coordX is : ' + coordX);
+    console.log('coordY is : ' + coordY);
+      
+    if (targ.className == 'board-card') { //Convert from percentage to px value
+      console.log(targ.style.left);
+      console.log(targ.style.top);
+      startingX = percentToPixel(targ.style.left, document.getElementById('board').getBoundingClientRect().width);
+      startingY = percentToPixel(targ.style.top, document.getElementById('board').getBoundingClientRect().height); 
+      coordX = parseInt(percentToPixel(targ.style.left, document.getElementById('board').getBoundingClientRect().width));
+      coordY = parseInt(percentToPixel(targ.style.top, document.getElementById('board').getBoundingClientRect().height));
+      //console.log('coordX is : ' + coordX);
+      //console.log('coordY is : ' + coordY);
+    }
+
+      console.log('startX is: ' + startingX);
+      console.log('startY is: ' + startingY);
+
+      // if (targ.className == 'board-card') {
+      //   startingX = targ.offsetLeft;
+      //   startingY = targ.offsetTop;
+      // }
+    
     drag = true;
   
     // move div element
@@ -425,38 +579,89 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     if (!e) { var e= window.event};
     // var targ=e.target?e.target:e.srcElement;
     // move div element
+    //console.log(e);
     targ.style.left=coordX+e.clientX-offsetX+'px';
     targ.style.top=coordY+e.clientY-offsetY+'px';
     return false;
   }
   
-  function stopDrag() {
-    if (playerTurnID == playerId) {
-      let position = document.getElementById('board').getBoundingClientRect();
+  function stopDrag(e) {
+    console.log(e);
+    let boardEl = document.getElementById('board');
+    let position = boardEl.getBoundingClientRect();
+
+    if (playerTurnID == playerId && targ.className == 'card') {
       let imgPos = targ.getBoundingClientRect();
-  
+      //Make sure card was dragged onto the board
       if ((parseFloat(imgPos.left) > parseFloat(position.left) && parseFloat(imgPos.left) < parseFloat(position.left) + (parseFloat(position.width) - parseFloat(imgPos.width))) &&
           (parseFloat(imgPos.top) > parseFloat(position.top) && parseFloat(imgPos.top) < parseFloat(position.top) + (parseFloat(position.height) - imgPos.height))) {
           drag = false;
-          board.testFields = 'success';
-          //Add card to board in firebase
-          gameSessionRef.child('board').update(board);
-  
+
+          //Get card suit and val from html card that was dragged
+          let cardId = e.path[0].attributes[2].value;
+          let cardEl = document.getElementById(cardId);
+
+          //Update Player Cards
+          updateHand(cardId);
+          console.log(playerCards);
+          let card = new Card(cardId.charAt(0), cardId.charAt(1));
+          let leftOffset = cardEl.offsetLeft; // get offset of card from left edge of user hand
+
+          document.querySelector('.user-hand').removeChild(cardEl); //Remove card from hand div and append to board
+          cardEl.style.height = '45%';
+          cardEl.style.width = '19%';
+
+          cardEl.setAttribute('class', 'board-card');
+
+          console.log('Targ left is: ' + targ.style.left);
+
+          cardEl.style.left = Math.round(100 * leftOffset / position.width, 1).toString() + '%';
+          cardEl.style.top = Math.round((100 * (parseFloat(targ.style.top.replace('px','')) + position.height + 8.5) / position.height), 1).toString()+ '%';
+          cardEl.style.border = '5px solid green';
+          cardEl.style.borderRadius = '20px';
+
+          card.x = cardEl.style.left;
+          card.y = cardEl.style.top;
+          
+          //Find which card is intersected if any
+          let intersected = findIntersected(card);
+          console.log('Interesected is: ' + intersected);
+          if (intersected != null) {
+            intersected.style.border = '5px solid red';
+            intersected.style.borderRadius = '20px';
+          }
+          //boardEl.appendChild(cardEl);
+
+          console.log('Left offset board chld is : ' + cardEl.offsetLeft);
+          console.log('x is: ' + card.x);
+          console.log('y is: ' + card.y);
+          board.push(card); //update local board state var
+          //Update Database Board with local version
+          gameSessionRef.update({ 
+            board: board, 
+            currentPlayer: getNextPlayer()
+        }); 
+
       } else {
         targ.style.left = startingX;
         targ.style.top = startingY;
         drag = false;
       }
   
-    } else {
-      targ.style.left = startingX;
-      targ.style.top = startingY;
-      drag = false;
+    } else { //If card not dragged onto board return to last position
+      if (targ.className == 'board-card') {
+        targ.style.left = pixelsToPercent(startingX, position.width);
+        targ.style.top = pixelsToPercent(startingY, position.height);
+        drag = false;
+      } else {
+        targ.style.left = startingX;
+        targ.style.top = startingY;
+        drag = false;
+      }
+      
     }
   }
-
   
-
 })();
 
 const CARD_VALUE_MAP = {
