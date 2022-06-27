@@ -604,6 +604,27 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
     //console.log(e);
     targ.style.left=coordX+e.clientX-offsetX+'px';
     targ.style.top=coordY+e.clientY-offsetY+'px';
+
+    //Find which card is intersected if any
+    let position = document.getElementById('board').getBoundingClientRect();
+    let cardId = e.path[0].attributes[2].value;
+    let cardEl = document.getElementById(cardId);
+    let card = new Card(cardId.charAt(0), cardId.charAt(1));
+    let leftOffset = cardEl.offsetLeft;
+
+    card.x = Math.round(100 * leftOffset / position.width, 1).toString() + '%';
+    card.y = Math.round((100 * (parseFloat(targ.style.top.replace('px','')) + position.height + 8.5) / position.height), 1).toString()+ '%';
+
+    let intersectedId = findIntersected(card);
+
+    console.log('Interesected is: ' + intersectedId);
+    if (intersectedId != null) {
+      let intersectedEl = document.getElementById(intersectedId);
+      //intersectedEl.setAttribute('style', 'border: 5px solid red, borderRadius: 20px');
+      intersectedEl.setAttribute.border = '5px solid red';
+      intersectedEl.setAttribute.borderRadius = '20px';
+    }
+
     return false;
   }
   
@@ -645,14 +666,14 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
           card.x = cardEl.style.left;
           card.y = cardEl.style.top;
           
-          //Find which card is intersected if any
-          let intersectedId = findIntersected(card);
-          console.log('Interesected is: ' + intersectedId);
-          if (intersectedId != null) {
-            let intersectedEl = document.getElementById(intersectedId);
-            intersectedEl.setAttribute('style', 'border: 5px solid red, borderRadius: 20px');
-            //intersectedEl.setAttribute.borderRadius = '20px';
-          }
+          // //Find which card is intersected if any
+          // let intersectedId = findIntersected(card);
+          // console.log('Interesected is: ' + intersectedId);
+          // if (intersectedId != null) {
+          //   let intersectedEl = document.getElementById(intersectedId);
+          //   intersectedEl.setAttribute('style', 'border: 5px solid red, borderRadius: 20px');
+          //   //intersectedEl.setAttribute.borderRadius = '20px';
+          // }
           //boardEl.appendChild(cardEl);
 
           console.log('Left offset board chld is : ' + cardEl.offsetLeft);
