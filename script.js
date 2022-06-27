@@ -463,15 +463,16 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
 
   function findIntersected(draggedCard) {
     console.log(draggedCard);
-    let draggedCardX = parseInt(draggedCard.x.replace('%',''));
-    let draggedCardY = parseInt(draggedCard.y.replace('%',''));
+    let draggedCardX = parseFloat(draggedCard.x);
+    let draggedCardY = parseFloat(draggedCard.y);
+    let returnVal = null;
 
     document.getElementById('board').childNodes.forEach(card => {
-      console.log(card);
-      console.log('Top: ' + parseInt(card.style.top));
-      console.log('Left: ' + parseInt(card.style.left));
-      console.log('X: ' + parseInt(draggedCard.x.replace('%', '')));
-      console.log('Y: ' + parseInt(draggedCard.y.replace('%', '')));
+      // console.log(card);
+      // console.log('Top: ' + parseInt(card.style.top));
+      // console.log('Left: ' + parseInt(card.style.left));
+      // console.log('X: ' + parseInt(draggedCard.x));
+      // console.log('Y: ' + parseInt(draggedCard.y.replace('%', '')));
 
       //let cardLeft = parseInt(card.style.left);
       //let cardTop = parseInt(card.style.top);
@@ -480,15 +481,36 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
       //console.log('Check2: ' +parseInt(card.style.left) + parseInt(card.style.width) > parseInt(draggedCard.x.replace('%','')));
       //console.log( 'Check3: ' + parseInt(card.style.top) < parseInt(draggedCard.y.replace('%','')));
       //console.log( 'Check4: ' + parseInt(card.style.top) + parseInt(card.style.height) > parseInt(draggedCard.y.replace('%','')));
-      if (areIntersecting(card, draggedCard)) {
-        return card
+      let squareDim = Math.round(parseInt(card.style.width)/4, 2);
+      let squareLeft = Math.round(parseFloat(card.style.left) + 0.5*parseInt(card.style.width) - 0.125*squareDim, 2);
+      let squareTop = Math.round(parseFloat(card.style.top) + 0.5*parseInt(card.style.height) - 0.125*squareDim, 2);
+      console.log('Square Dim: ', squareDim);
+      console.log('squareLeft: ' + squareLeft);
+      console.log('squareTop: ' + squareTop);
+      // intersectionSquare = {
+      //   width: squareDim,
+      //   height: squareDim,
+      //   left: squareLeft,
+      //   top: squareTop
+      // };
+      let leftCheck = squareLeft > draggedCardX && squareLeft < draggedCardX + (parseFloat(card.style.width) - squareDim);
+      let topCheck = squareTop > draggedCardY && squareTop < draggedCardY + (parseFloat(card.style.height) - squareDim);
+      console.log('leftcheck: ' + leftCheck);
+      console.log('topcheck: ' + topCheck);
+
+      if ( leftCheck && topCheck) {
+            returnVal = card.getAttribute('id');
       }
+      
+      // if (areIntersecting(card, draggedCard)) {
+      //   return card
+      // }
       // if (parseInt(card.style.left) < parseInt(draggedCard.x.replace('%','')) && parseInt(card.style.left) + parseInt(card.style.width) > parseInt(draggedCard.x.replace('%','')) && parseInt(card.style.top) < parseInt(draggedCard.y.replace('%','')) && 
       // parseInt(card.style.top) + parseInt(card.style.height) > parseInt(draggedCard.y.replace('%',''))) {
       //   return card;
       // }
     });
-    return null;
+    return returnVal;
   }
 
   function areIntersecting(card, draggedCard) {
@@ -624,11 +646,12 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
           card.y = cardEl.style.top;
           
           //Find which card is intersected if any
-          let intersected = findIntersected(card);
-          console.log('Interesected is: ' + intersected);
-          if (intersected != null) {
-            intersected.style.border = '5px solid red';
-            intersected.style.borderRadius = '20px';
+          let intersectedId = findIntersected(card);
+          console.log('Interesected is: ' + intersectedId);
+          if (intersectedId != null) {
+            let intersectedEl = document.getElementById(intersectedId);
+            intersectedEl.setAttribute('style', 'border: 5px solid red, borderRadius: 20px');
+            //intersectedEl.setAttribute.borderRadius = '20px';
           }
           //boardEl.appendChild(cardEl);
 
@@ -636,6 +659,7 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
           console.log('x is: ' + card.x);
           console.log('y is: ' + card.y);
           board.push(card); //update local board state var
+
           //Update Database Board with local version
           gameSessionRef.update({ 
             board: board, 
