@@ -535,6 +535,7 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
   let coordY;
   let drag;
   let targ;
+  let intersectedEl;
 
   function startDrag(e) {
     console.log(e);
@@ -617,12 +618,18 @@ const joinSessionInp = document.querySelector("input[name='join-session'");
 
     let intersectedId = findIntersected(card);
 
-    console.log('Interesected is: ' + intersectedId);
-    if (intersectedId != null) {
-      let intersectedEl = document.getElementById(intersectedId);
-      //intersectedEl.setAttribute('style', 'border: 5px solid red, borderRadius: 20px');
-      intersectedEl.setAttribute.border = '5px solid red';
-      intersectedEl.setAttribute.borderRadius = '20px';
+    if (intersectedId != null) { //Detect if intersected card was foudn during this mouse mouvement
+      intersectedEl = document.getElementById(intersectedId); //Set the style of both the intersected and dragged card to red
+      intersectedEl.style.borderColor = "red";
+      cardEl.style.border = '5px solid red';
+      cardEl.style.borderRadius = '20px';
+    } 
+    else { //No card detected this mouse movement
+      if (intersectedEl != undefined) { //If intersected elements exists delete old border and clear it
+        cardEl.style.border = 'none';
+        intersectedEl.style.borderColor = 'green';
+        intersectedEl = undefined;
+      }
     }
 
     return false;
