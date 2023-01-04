@@ -1,0 +1,205 @@
+.App {
+  text-align: center;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+#game-host {
+  z-index: 2;
+  width: 50vw;
+  height: 70vh;
+  background-color: white;
+  margin: 0 auto;
+  top: 48.5%; 
+  transform: translate(50%,-50%);
+  position: absolute;
+}
+
+#cuarenta {
+  width: 100vw;
+  height: 100vh;
+  background-color: rgb(5, 4, 4);
+  margin: auto;
+  position: relative;
+}
+
+#board {
+  z-index: 0;
+  width: 50vw;
+  height: 50vh;
+  background-color: white;
+  margin: 0 auto;
+  position: absolute;
+  top: 48.5%; 
+  transform: translate(50%,-50%);
+}
+#choose-game-creation-option {
+  width: 100%;
+  height:100%;
+  left: 50%;
+}
+
+#join-game {
+  display: none;
+  z-index: 3;
+  width: 50vw;
+  height: 70vh;
+  background-color: white;
+  margin: 0 auto;
+  /* top: 48.5%; 
+  transform: translate(50%,-50%); */
+  position: relative;
+}
+
+#post-join {
+  display: none;
+  margin: 0 auto;
+  position: absolute;
+  width: 45vw;
+  height: 70vh;
+  left: 30px;
+}
+.player-list {
+  border:1px solid black;
+  width: 100px;
+  position: absolute;
+  margin: 0 auto;
+  left: 250px;
+  top: 150px;
+}
+
+#playerList {
+  border:1px solid black;
+  width: 100px;
+  position: absolute;
+  margin: 0 auto;
+  left: 250px;
+  top: 150px;
+}
+
+#players-host {
+  position: absolute;
+  top: 100px;
+  left: 165px;
+}
+
+#create-game {
+  display: none;
+  z-index: 3;
+  width: 50vw;
+  height: 70vh;
+  background-color: white;
+  margin: 0 auto;
+  position: relative;
+}
+
+#create-game-id-created {
+  display: none;
+  z-index: 3;
+  width: 45vw;
+  height: 70vh;
+  background-color: white;
+  margin: 0 auto;
+  position: absolute;
+  left: 30px;
+}
+
+#game-details {
+  position:absolute;
+  left: 3%;
+  top:23.5%;
+  width: 20%;
+  height: 50%;
+  margin: 0;
+  padding: 0;
+  background-color: white;
+}
+
+#start-game-btn {
+  position: absolute;
+  width: fit-content;
+  left:250px;
+  top: 300px;
+  display: none;
+}
+
+.user-hand {
+  height: 25vh;
+  width: 50vw;
+  background-color: white;
+  position: relative;
+  top: 75%;
+  margin: 0 auto;
+  display: none;
+  z-index: 5;
+  
+}
+
+
+.button {
+  width: 25vw;
+  z-index:4;
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  -ms-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+}
+
+.joinGame {background-color: #4CAF50;} /* Green */
+.joinGame {top: 40%;}
+.createGame {background-color: #008CBA;} /* Blue */
+.createGameSession {background-color: rebeccapurple;}
+.joinGameSession {background-color: rebeccapurple;}
+.testGame {
+  background-color: red;
+  top: 70%;
+}
+
+.input {
+  width: 25vw;
+  height: 20px;
+}
+.join-session-id {margin-left : 5%;}
+.join-session-name {margin-left : 5%;}
+
+
+.p {
+  color: black;
+}
+.join-session-id {margin-left : 5%;} 
+.join-session-name {margin-left : 5%;} 
+.created-session-id {top: 40%;}
+.created-session-id {left: 25%;}
+.created-session-id {position: relative;}
+.create-session-name {left: 25%;}
+.create-session-name {position: relative;}
+
+.card {
+  margin: 0 auto;
+  position: relative;
+  height: calc(0.9 * 25vh);
+  width: calc(0.19* 50vw);
+  top: 75%;
+  /* left: 1%; */
+  padding-inline: 2px;
+  display: inline-block;
+  z-index: 10;
+}
+
+.board-card {
+  position: absolute;
+}
+
