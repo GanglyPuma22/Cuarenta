@@ -139,21 +139,27 @@
           //let board = this.props.boardCards;
 
           //Check if card was intersected
-          if (intersectedCard) {
+          //if (intersectedCard) {
             //Check if intersection was a productive play
-            checkPlay(board, card);
+            //checkPlay(board, card);
             //If not valid play just draw it as normal moving it away from card
-          }
+          //}
+
+          //Check play and update board with results
+          updateBoard(checkPlay(card), card);
 
           //TODO
           //Update Board --> Push or remove as needed figure that out
+
           //updateBoard(cardList);
+
 
           //Figure out how to count points
 
-          //Update left side current player and points information etc...
+          //Update left side current player and points information and how many cards they have collected etc...
 
-          board.push(card);
+          //board.push(card);
+
           console.log(board);
 
           firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
@@ -187,27 +193,133 @@
         </Draggable>); 
     }
   }
+  
 
-  function checkPlay(board, card) {
-    let cardsToRemove = [];
-    console.log(intersectedCard);
-    //Check if two cards intersected have same value
-    if (intersectedCard.id[1] == card.value) {
-      let lastPlayedCard = board[board.length - 1];
-      //Check if card was also last played by opponent meaning Keida
-      if (lastPlayedCard.suit + lastPlayedCard.value === intersectedCard.id) {
-        console.log("KEIDA");
-        cardsToRemove.push(lastPlayedCard);
-        cardsToRemove.push(card)
-        return cardsToRemove;
+  //Checks if board contains card with consecutive vlaue to input
+  // function containsConsecutive(board, cardVal) {
+  //   if (board.some(card => card.value === parseInt(cardVal) + 1)) {
+  //     /* vendors contains the element we're looking for */
+  //     const i = vendors.findIndex(e => e.Name === 'Magenic');
+  //   }
+
+  //   for(let card of board) {
+  //     if (mapCardVal(card.value) ==  cardVal + 1) {
+  //       document.getElementById(card.suit + card.value).style.border = "5px solid red";
+  //       return card;
+  //     }
+  //   }
+  // }
+  function updateBoard(cardsToRemove, playedCard) {
+    console.log(board);
+
+    if (cardsToRemove.length === 0) {
+      board.push(playedCard);
+      return;
+    } else {
+      for (let card of cardsToRemove) {
+        //If board contains a card to remove splice board array at that index
+        if (board.some(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)) {
+          board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
+        }
       }
     }
     
+  }
 
-    //After updating board check for limpia 
+  function mapCardVal(cardVal) {
+    switch (cardVal) {
+      case "A": 
+        return 1;
+      case "J": 
+        return 8;
+      case "Q": 
+        return 9;
+      case "K": 
+        return 10;
+      default:
+        return parseInt(cardVal);
+    }
+  }
+
+  //Function checks if last card intersection was a valid play
+  //board is current board state, card is object version of played card
+  //Returns cards to remove from board
+  function checkPlay(card) {
+    console.log(board);
+
+    //Keep track of which cards to remove from board
+    let cardsToRemove = [];
+
+    //If card was intersected check all rules resulting of that
+    if(intersectedCard) {
+      console.log(intersectedCard.id[1]);
+      //Check if two cards intersected have same value
+      if (intersectedCard.id[1] == card.value) {
+        let lastPlayedCard = board[board.length - 1];
+
+        cardsToRemove.push( new Card(intersectedCard.id[0], intersectedCard.id[1]));//Remove intersected card
+        cardsToRemove.push(card); //Remove played card
+
+        //Check if card was also last played by opponent meaning Keida
+        if (lastPlayedCard.suit + lastPlayedCard.value === intersectedCard.id) {
+          console.log("KEIDA");
+        }
+
+        let consecVal = mapCardVal(card.value);
+
+        //Check if there exists consecutive cards and highlight them red
+        while (board.some(card => mapCardVal(card.value) === consecVal + 1)) {
+          //Find index of consec card
+          let consecCard = board[board.findIndex(card => mapCardVal(card.value) === consecVal + 1)];
+          //Remove consec cards from board
+          cardsToRemove.push(consecCard);
+          document.getElementById(consecCard.suit + consecCard.value).style.border = "5px solid red";
+          consecVal++;
+        }
+      }
+      
+      //After updating board check for limpia 
+      if (cardsToRemove.length == board.length) {
+        console.log("LIMPIA");
+      }
+    } else { 
+      //No card intersection check for sums, otherwise
+      //Check SUM, highlight cards red
+      //Get all pairs that sum to played card, only relevant to number cards
+      for (let pair of getPairs(card)) {
+        document.getElementById(pair.card1.suit + pair.card1.value).style.border = "5px solid red";
+        document.getElementById(pair.card2.suit + pair.card2.value).style.border = "5px solid red";
+      }
+    }
+
+    console.log(cardsToRemove);
+    return cardsToRemove;
   }
 
   export default DraggableCard;
+
+ 
+  function getPairs(playedCard) {
+    let pairs = [];
+
+    if (playedCard.value != "J" && playedCard.value != "Q" && playedCard.value != "K") {
+      for (let boardCard of board) {
+        if (boardCard.value != "J" && boardCard.value != "Q" && boardCard.value != "K") {
+          if (board.some(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value)) &&
+              !pairs.some(pair => pair.card1.suit === boardCard.suit && pair.card1.value === boardCard.value)) {
+
+            pairs.push({
+              card1: board[board.findIndex(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value))],
+              card2: boardCard
+            });
+            
+          }
+        }
+      }
+    }
+    console.log(pairs);
+    return pairs;
+  }
 
   function percentToPixel(percentVal, dimension) {
     return Math.round(dimension * parseInt(percentVal)/100, 1).toString() + 'px';
