@@ -42,6 +42,7 @@ let team2 = {};
 let playerId;
 let playerCount;
 let playerRef;
+let players;
 
 //Storage Vars
 let playerCards = {};
@@ -51,7 +52,7 @@ let board = []; //Initialize board array that will store databse board info
 let inTestMode = false;
 
 
-export {team1,team2, board, playerCards, playerTurnID, playerId, playerCount};
+export {team1,team2,players, board, playerCards, playerTurnID, playerId, playerCount};
 
 //After login this function triggers
 firebase.auth().onAuthStateChanged((user) => {
@@ -124,7 +125,12 @@ export function initRefs(gameSessionRef) {
 
   //Updates local var playerTurnID everytime it gets updates in db
   gameSessionRef.child('currentPlayer').on("value", (snapshot) => {
-    playerTurnID = snapshot.val() || "";
+    playerTurnID = snapshot.val().playerId || "";
+  });
+
+  //Update local var players everytme it gets updated in db
+  gameSessionRef.child("sessionPlayers").on("value", (snapshot) => {
+    players = snapshot.val() || {};
   });
 
   //Next two refs check for team1 and team2 value to be set and set playerCards to be current player's cards from database

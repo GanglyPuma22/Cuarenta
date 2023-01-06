@@ -48,7 +48,6 @@ const baseImageUrl = "./cards/";
 let gameSessionRef; 
 
 
-
 function App() {
   const hostTableRef = useRef(null);
   const userHandRef = useRef(null);
@@ -57,6 +56,26 @@ function App() {
   const [gameHostView, setGameHostView] = useState(true);
   const [preJoinView, setPreJoinView] = useState(true);
   const [gameId, setGameId] = useState("");
+  const [team1, setTeam1] = useState({
+    points: 0,
+    cardsCollected: 0,
+    player1: {
+      name: "",
+      playerId: ""
+    },
+    player2: {
+      name: "",
+      playerId: ""
+    }
+  });
+
+  const [team2, setTeam2] = useState({
+    points: 0,
+    cardsCollected: 0,
+    player1: {},
+    player2: {}
+  });
+
   const [board, setBoard] = useState({cards : []});
   const [players, setPlayers] = useState({1 :{}, 2:{}, 3:{}, 4:{}});
   const [playerCount, setPlayerCount] = useState(0);
@@ -79,27 +98,9 @@ function App() {
     let arr = [];
     if (cards) {
       if (cards.length > 0) {
-        console.log("INSIDE CARDS");
         for (let i = 0; i < cards.length; i++) {
-          console.log(cards[i]);
-          console.log(userHandRef);
           arr.push(<img 
           style={{position: 'absolute', top: cards[i].y, left: cards[i].x, height: '45%', width: '19%', border: getBorderColor(i, cards[i].intersected, cards.length)}} 
-          // onDragEnter = {() => {
-          //   console.log("INTERSECTION BEGINS");
-          //   if (isPlayerTurn()) {
-          //     cards[i].intersected = true;
-          //   }
-          // }}
-          // onDragOver = {() => {
-
-          // }}
-          // onDragLeave = {() => {
-          //   console.log("INTERSECTION ENDS");
-          //   if (isPlayerTurn()) {
-          //     cards[i].intersected = false;
-          //   }
-          // }}
           className="card" id={cards[i].suit + cards[i].value} draggable="false" 
           src={cardImages(`./${suitToText(cards[i].suit)+"/"+cards[i].value}.PNG`)} 
           alt={cardImages('./default.png')}></img>)
@@ -147,8 +148,15 @@ function App() {
   }
 
   function createTeams() {
-    let team1 = {};
-    let team2 = {};
+    let team1 = {
+      points: 0,
+      cardsCollected: 0
+    };
+
+    let team2 = {
+      points: 0,
+      cardsCollected: 0
+    };
 
     let deck = new Deck(freshDeck()); //Create game deck
     deck.shuffle(); //Shuffle it
@@ -186,6 +194,9 @@ function App() {
       }
     });
 
+    //setTeam1(team1);
+    //setTeam2(team2);
+
     //Save teams in database, set starting player
     firebase.database().ref('gameSession/'+gameId).update({
       team1: team1,
@@ -200,52 +211,49 @@ function App() {
   useEffect(() => {
     console.log("GAME HOST EFFECT RUNNING");
     if (gameId.length === 20) {
-        console.log("Creating game session ref listener");
         gameSessionRef = firebase.database().ref('gameSession/'+gameId);
 
         //Fires whenever a change occurs to playerCount for current game session
         gameSessionRef.child('playerCount').on("value", (snapshot) => { 
-          console.log("Player count ref triggered: " + snapshot.val());
           setPlayerCount(snapshot.val());
         }); 
 
+        //Save changes to teams
+        gameSessionRef.child('team1').on("value", (snapshot) => {
+          console.log(snapshot.val());
+          if (snapshot.val()) {
+            setTeam1(snapshot.val());
+          }
+        })
+        gameSessionRef.child('team2').on("value", (snapshot) => {
+          console.log(snapshot.val());
+          if (snapshot.val()) {
+            setTeam2(snapshot.val());
+          }
+        })
+
         //Save players
         gameSessionRef.child('sessionPlayers').on("value", (snapshot) => {
-          console.log(snapshot.val());
           setPlayers(processPlayers(snapshot.val())); 
         });
 
         //Save board state
         gameSessionRef.child('board').on("value", (snapshot) => {
-          console.log(snapshot.val());
           if (snapshot.val()) {
             setBoard(snapshot.val());
             setComponentArray(createBoardElements(snapshot.val()));
-            console.log(componentArray);
           }
         });
 
         //Save current player on update
         gameSessionRef.child('currentPlayer').on("value", (snapshot) => {
-          //setCurrentPlayer(snapshot.val() || "");
-          console.log(players);
-          if (players) {
-            for (let i = 1; i < 5; i++) {
-              if (players[i] !== undefined) {
-                if (players[i].playerId === snapshot.val()) {
-                  setCurrentPlayer(players[i]);
-                  console.log(players[i]);
-                }
-              }
-            }
+          if (snapshot.val()) {
+            setCurrentPlayer(snapshot.val());
           }
-          
         });
 
         //Detect game start
         gameSessionRef.child('gameState').on("value", (snapshot) => {
-          console.log('INSIDE GAME STATE');
-          console.log(snapshot.val());
           if (snapshot.val() == 'started') {
             console.log("START GAME");
             //Hide game host 
@@ -289,7 +297,7 @@ function App() {
         <p className="p created-session-id"> Create Game Session: </p>
         <p className="p create-session-name"> Enter your name: </p>
         <input className="input create-session-name" name="create-name" maxlength="30" type="text"/>
-        <button className="button createGameSession" name="create-session" onClick={() => {console.log('creating'); let id = createGame(); setCreateGameView(false); setGameId(id)}}> Create Game </button> 
+        <button className="button createGameSession" name="create-session" onClick={() => {console.log('creating'); let res = createGame(); setCreateGameView(false); setCurrentPlayer(res.player); setGameId(res.id)}}> Create Game </button> 
       </div>
 
       <div id = "create-game-id-created" style={{display: gameId.length !== 20 || joinGameView ? 'none' : 'block'}}>
@@ -307,7 +315,7 @@ function App() {
 
     </div>
     
-    <div id="board" onDragOver={() => console.log("DRAGGING")} onDrop= {() => console.log("DROPPED")} onDragEnter = {() => { console.log("CARD IS ON BOARD")}} onDragLeave = {() => { console.log("CARD IS NOT A PART OF BOARD")}} boardCards={board.cards}> 
+    <div id="board" boardCards={board.cards}> 
       {componentArray}
     </div>
 
@@ -318,16 +326,20 @@ function App() {
     <DraggableCard gameId={gameId} id="card-slot5" num="5" card={userHand[5]}> </DraggableCard>_
 
     <div id = "game-details" style={{display: Object.keys(userHand[1]).length !== 0 ? 'block' : 'none'}}> 
-      Current Player Turn: {currentPlayer.name}
+      <h3> Current Player Turn: {currentPlayer.name} </h3>
+      <h3> Red Team: </h3> 
+        <p3>{team1.player1.name} and {team1.player2.name} </p3>
+        <br />
+        <p3> Points: {team1.points + '\n'} </p3>
+        <br/>
+        <p3> Cards Collected This Round: {team1.cardsCollected} </p3>
+      <h3> Blue Team: </h3>
+           {team2.player1.name} and {team2.player2.name} 
+           <br />
+           Points: {team2.points}
+           <br />
+           Cards Collected This Round: {team2.cardsCollected}
     </div>
-
-    {/* <div className="user-hand" ref={userHandRef} style={{display: Object.keys(userHand[1]).length !== 0 ? 'block' : 'none'}}> 
-      <DraggableCard gameId={gameId} id="card-slot1" num="1" card={userHand[1]}> </DraggableCard>
-      <DraggableCard gameId={gameId} id="card-slot2" num="2" card={userHand[2]}> </DraggableCard>
-      <DraggableCard gameId={gameId} id="card-slot3" num="3" card={userHand[3]}> </DraggableCard>
-      <DraggableCard gameId={gameId} id="card-slot4" num="4" card={userHand[4]}> </DraggableCard>
-      <DraggableCard gameId={gameId} id="card-slot5" num="5" card={userHand[5]}> </DraggableCard>_
-    </div>  */}
     
   </div>
 

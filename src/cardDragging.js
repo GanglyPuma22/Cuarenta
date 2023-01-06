@@ -31,6 +31,14 @@
       return playerId === playerTurnID;
   }
 
+  //Gets the team of current player
+  function findTeam() {
+    switch(playerId) {
+      case team1.player1.playerId: return 1;
+      case team1.player2.playerId: return 1;
+      default: return 2;
+    }
+  }
   //Determines if card img html is inside board div element
   function cardOnBoard(e) {
     let boardDim = document.getElementById("board").getBoundingClientRect();
@@ -146,27 +154,35 @@
           //}
 
           //Check play and update board with results
-          updateBoard(checkPlay(card), card);
-
+          let result = checkPlay(card);
+          console.log(result);
+          updateBoard(result.cardsToRemove, card);
           //TODO
-          //Update Board --> Push or remove as needed figure that out
-
-          //updateBoard(cardList);
-
-
-          //Figure out how to count points
-
-          //Update left side current player and points information and how many cards they have collected etc...
+          //Fix keida not updating board correctly
+          //Figure out how to deal with sums of cards
+          //Add banner above saying your name
 
           //board.push(card);
-
-          console.log(board);
 
           firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
             board: board, 
             currentPlayer: getNextPlayer()
           }); 
 
+          //Update current player teams' points and cards collected
+          let teamNum = findTeam();
+          if (teamNum == 1) {
+            firebase.database().ref('gameSession/'+ this.props.gameId + '/team1').update({ 
+              points: team1.points + result.points, 
+              cardsCollected: team1.cardsCollected + result.cardsCollected
+            }); 
+          } else {
+            firebase.database().ref('gameSession/'+ this.props.gameId + '/team2').update({ 
+              points: team2.points + result.points, 
+              cardsCollected: team2.cardsCollected + result.cardsCollected
+            }); 
+          }
+          
           //Hide played card
           e.target.style.display = 'none';
 
@@ -210,8 +226,6 @@
   //   }
   // }
   function updateBoard(cardsToRemove, playedCard) {
-    console.log(board);
-
     if (cardsToRemove.length === 0) {
       board.push(playedCard);
       return;
@@ -246,6 +260,11 @@
   //Returns cards to remove from board
   function checkPlay(card) {
     console.log(board);
+    let res = {
+      cardsCollected: 0,
+      points: 0,
+      cardsToRemove: []
+    };
 
     //Keep track of which cards to remove from board
     let cardsToRemove = [];
@@ -257,11 +276,14 @@
       if (intersectedCard.id[1] == card.value) {
         let lastPlayedCard = board[board.length - 1];
 
-        cardsToRemove.push( new Card(intersectedCard.id[0], intersectedCard.id[1]));//Remove intersected card
-        cardsToRemove.push(card); //Remove played card
+        res.cardsToRemove.push( new Card(intersectedCard.id[0], intersectedCard.id[1]));//Remove intersected card
+        res.cardsToRemove.push(card); //Remove played card
 
         //Check if card was also last played by opponent meaning Keida
         if (lastPlayedCard.suit + lastPlayedCard.value === intersectedCard.id) {
+          //Add two points and two cards to count
+          res.points = 2;
+          res.cardsCollected = 2;
           console.log("KEIDA");
         }
 
@@ -272,14 +294,16 @@
           //Find index of consec card
           let consecCard = board[board.findIndex(card => mapCardVal(card.value) === consecVal + 1)];
           //Remove consec cards from board
-          cardsToRemove.push(consecCard);
+          res.cardsToRemove.push(consecCard);
           document.getElementById(consecCard.suit + consecCard.value).style.border = "5px solid red";
           consecVal++;
+          res.cardsCollected = res.cardsCollected + 1;
         }
       }
       
       //After updating board check for limpia 
       if (cardsToRemove.length == board.length) {
+        res.points = 2;
         console.log("LIMPIA");
       }
     } else { 
@@ -292,8 +316,7 @@
       }
     }
 
-    console.log(cardsToRemove);
-    return cardsToRemove;
+    return res;
   }
 
   export default DraggableCard;
@@ -307,7 +330,6 @@
         if (boardCard.value != "J" && boardCard.value != "Q" && boardCard.value != "K") {
           if (board.some(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value)) &&
               !pairs.some(pair => pair.card1.suit === boardCard.suit && pair.card1.value === boardCard.value)) {
-
             pairs.push({
               card1: board[board.findIndex(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value))],
               card2: boardCard
@@ -330,15 +352,23 @@
   }
 
   export function getNextPlayer() {
+    let nextPlayer = {};
+
     if (playerTurnID == team1.player1.playerId) {
-      return team2.player1.playerId;
+      nextPlayer.name = team2.player1.name;
+      nextPlayer.playerId = team2.player1.playerId;
     } else if (playerTurnID == team1.player2.playerId) {
-      return team2.player2.playerId;
+      nextPlayer.name = team2.player2.name;
+      nextPlayer.playerId = team2.player2.playerId;
     } else if (playerTurnID == team2.player1.playerId) {
-      return team1.player2.playerId;
+      nextPlayer.name = team1.player2.name;
+      nextPlayer.playerId = team1.player2.playerId;
     } else if (playerTurnID == team2.player2.playerId) {
-      return team1.player1.playerId;
+      nextPlayer.name = team1.player1.name;
+      nextPlayer.playerId = team1.player1.playerId;
     }
+
+    return nextPlayer;
   }
 
  

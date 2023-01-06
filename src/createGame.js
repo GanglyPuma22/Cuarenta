@@ -30,7 +30,9 @@ export function createGame() {
       id: gameId,
       playerCount: 1,
       gameState: 'lobby',
-      currentPlayer: playerId //game host starts game
+      currentPlayer: {playerId: playerId,
+                      name: username
+                      }//game host starts game
     });
 
     //Add player to game session's players
@@ -40,7 +42,13 @@ export function createGame() {
       name: username
     });
 
-    return gameId;
+    let res = {id: gameId,
+           player: {playerId: playerId,
+                    name: username
+                  }
+          };
+
+    return res;
   }
 
 
