@@ -1,4 +1,4 @@
-  import { playerTurnID, playerId, playerCards, board, team1, team2} from "./index.js";
+  import { playerTurnID, playerId, playerCards,board, team1, team2} from "./index.js";
   import firebase from 'firebase/compat/app';
   import 'firebase/compat/database';
   import Card from "./card.js";
@@ -81,7 +81,7 @@
     constructor(props) {
       super(props);
     }
-
+    
     state = {
       intersecting: false,
       clientPosition: {
@@ -91,6 +91,7 @@
         x: 0, y: 0
       }
     };
+
 
     updateLastPosition = (e, position) => {
       const {x, y} = position;
@@ -156,17 +157,35 @@
           //Check play and update board with results
           let result = checkPlay(card);
           console.log(result);
-          updateBoard(result.cardsToRemove, card);
+          //Add card to board before checking how it is updated
+          board.push(card);
+          updateBoard(result.cardsToRemove);
+          console.log(board);
+
+          //Update keida card seperately to give border color time to update
+          // firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
+          //   keidaCard: !cardsRemoved ? card : {},
+          // }); 
+
           //TODO
+          //Check on limpia post keida
+
           //Fix keida not updating board correctly
+          //BIG CHANGE: 
+          //It would probably be good to breakout the updating board functionality and checkplay functionality 
+          //This file is just supposed to take care of dragging
+          //UPDATE BOARD FUNCTION PROBLEM because cards to remove returns correctly
           //Figure out how to deal with sums of cards
           //Add banner above saying your name
 
           //board.push(card);
 
           firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
-            board: board, 
-            currentPlayer: getNextPlayer()
+            currentPlayer: getNextPlayer(),
+            board: {
+                    boardCards: board, //cardsToRemove array of cards to take out of board var
+                    keidaCard: result.cardsToRemove.length == 0 ? card : {}
+                   }
           }); 
 
           //Update current player teams' points and cards collected
@@ -183,9 +202,9 @@
             }); 
           }
           
-          //Hide played card
-          e.target.style.display = 'none';
-
+          //Delete played card
+          //e.target.style.display = 'none';
+          e.target.remove();
 
         } else { //Return to start if not placed on board
           this.updateLastPosition(e, {x:0, y:0});
@@ -225,19 +244,74 @@
   //     }
   //   }
   // }
-  function updateBoard(cardsToRemove, playedCard) {
-    if (cardsToRemove.length === 0) {
-      board.push(playedCard);
-      return;
-    } else {
-      for (let card of cardsToRemove) {
+
+
+  //Function updates board by removing the cards in cardsToRemove array provided by checkplay function
+  //If cardsToRemove array is empty, simply push playedCard onto the board as the play
+  //Return if cards were removed or not
+
+  // function updateBoard(cardsToRemove, playedCard) {
+  //   if (cardsToRemove.length === 0) {
+  //     board.push(playedCard);
+  //   } else {
+  //   }
+  // }
+  function updateBoard(cardsToRemove) {
+    //var tempBoard = board;
+    console.log(board);
+
+    if (cardsToRemove.length != 0) {
+      cardsToRemove.forEach(function (card) {
         //If board contains a card to remove splice board array at that index
-        if (board.some(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)) {
-          board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
-        }
-      }
+        board.forEach(function(boardCard) {
+          if (boardCard.suit === card.suit && boardCard.value === card.value) {
+            console.log(boardCard);
+            removeCard(boardCard);
+            //board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
+          }
+        });
+        // console.log(board[board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)]);
+        // board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
+        //console.log(board);
+      });
+      // for (let card of cardsToRemove) {
+        
+      // }
     }
-    
+  }
+
+  // function updateBoard(cardsToRemove) {
+  //   var tempBoard = board;
+  //   console.log(tempBoard);
+
+  //   if (cardsToRemove.length != 0) {
+  //     cardsToRemove.forEach(function (card) {
+  //       //If board contains a card to remove splice board array at that index
+  //       tempBoard.forEach(function(boardCard) {
+  //         if (boardCard.suit === card.suit && boardCard.value === card.value) {
+  //           console.log(boardCard);
+  //           tempBoard = removeCard(tempBoard, boardCard);
+  //         }
+  //       });
+  //       // console.log(board[board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)]);
+  //       // board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
+  //       //console.log(board);
+  //     });
+  //     // for (let card of cardsToRemove) {
+        
+  //     // }
+  //   }
+  //   console.log(tempBoard);
+  //   return tempBoard;
+  // }
+
+  function removeCard(card) {
+    for (let i = 0; i < board.length; i++) {
+        if (board[i].suit === card.suit && board[i].value === card.value) {
+          board.splice(i, 1);
+        }
+    }
+    console.log(board);
   }
 
   function mapCardVal(cardVal) {
@@ -263,7 +337,8 @@
     let res = {
       cardsCollected: 0,
       points: 0,
-      cardsToRemove: []
+      cardsToRemove: [],
+      board: board
     };
 
     //Keep track of which cards to remove from board
@@ -307,6 +382,9 @@
         console.log("LIMPIA");
       }
     } else { 
+      //Below concept is wrong approach. Check sum should be done on top of what is already done not instead of intersected card
+
+
       //No card intersection check for sums, otherwise
       //Check SUM, highlight cards red
       //Get all pairs that sum to played card, only relevant to number cards
@@ -321,26 +399,49 @@
 
   export default DraggableCard;
 
- 
-  function getPairs(playedCard) {
-    let pairs = [];
-
-    if (playedCard.value != "J" && playedCard.value != "Q" && playedCard.value != "K") {
-      for (let boardCard of board) {
-        if (boardCard.value != "J" && boardCard.value != "Q" && boardCard.value != "K") {
-          if (board.some(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value)) &&
-              !pairs.some(pair => pair.card1.suit === boardCard.suit && pair.card1.value === boardCard.value)) {
-            pairs.push({
-              card1: board[board.findIndex(card => parseInt(boardCard.value) + parseInt(card.value) === parseInt(playedCard.value))],
-              card2: boardCard
-            });
-            
-          }
-        }
+  function getAllPairs(arr) {
+    var pairs = [];
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        pairs.push([arr[i], arr[j]]);
       }
     }
-    console.log(pairs);
     return pairs;
+  }
+ 
+  function getPairs(playedCard) {
+    let pairs = getAllPairs(board);
+    let playedCardVal = mapCardVal(playedCard.value);
+
+    let output = [];
+
+    if (playedCardVal != 8 && playedCardVal != 9 && playedCardVal != 10 && playedCardVal != 1) {
+      for (let i = 0; i < pairs.length; i++) {
+        if (mapCardVal(pairs[i][1].value) + mapCardVal(pairs[i][0].value) == playedCardVal) {
+          console.log("PAIR FOUND: ",pairs[i]); 
+          output.push({
+            card1: pairs[i][0],
+            card2: pairs[i][1]
+          });
+        }
+      }
+
+      // for (let boardCard of board) {
+      //   let boardCardVal = mapCardVal(boardCard);
+      //   if (boardCardVal != 8 && boardCardVal != 9 && boardCardVal != 10) {
+      //     if (board.some(card => boardCardVal + mapCardVal(card.value) === playedCardVal) &&
+      //         !pairs.some(pair => pair.card1.suit === boardCard.suit && pair.card1.value === boardCard.value)) {
+      //       pairs.push({
+      //         card1: board[board.findIndex(card => boardCardVal + mapCardVal(card.value) === playedCardVal)],
+      //         card2: boardCard
+      //       });
+            
+      //     }
+      //   }
+      // }
+    }
+    console.log(output);
+    return output;
   }
 
   function percentToPixel(percentVal, dimension) {

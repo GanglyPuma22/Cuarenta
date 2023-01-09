@@ -75,32 +75,38 @@ function App() {
     player1: {},
     player2: {}
   });
-
-  const [board, setBoard] = useState({cards : []});
+  //const [keidaCard, setKeidaCard] = useState({});
+  const [board, setBoard] = useState({boardCards : []});
   const [players, setPlayers] = useState({1 :{}, 2:{}, 3:{}, 4:{}});
   const [playerCount, setPlayerCount] = useState(0);
   const [componentArray, setComponentArray] = useState([]);
   const [userHand, setUserHand] = useState({1 :{}, 2:{}, 3:{}, 4:{}, 5 : {}});
   const [currentPlayer, setCurrentPlayer] = useState({name: "", playerId:""});
 
-  function getBorderColor(cardNum, isIntersected, length) {
+  function getBorderColor(card, keidaCard) {
     let border = 'none';
-    //If last card played make border green
-    if (cardNum === length-1) {
-      border = '5px solid green';
+    if (keidaCard) { //Make sure kiedaCard prop exists in db
+      //If this card is keidaCard set its border to green
+      if (Object.keys(keidaCard).length != 0) {
+        if (card.suit == keidaCard.suit && card.value == keidaCard.value) {
+          border = '5px solid green';
+        }
+      }
     }
+    
     return border;
   }
 
-
   //Creates board elements based on card
-  function createBoardElements(cards) {
+  function createBoardElements(board) {
+    console.log(board.boardCards);
+    let cards = board.boardCards;
     let arr = [];
     if (cards) {
       if (cards.length > 0) {
         for (let i = 0; i < cards.length; i++) {
           arr.push(<img 
-          style={{position: 'absolute', top: cards[i].y, left: cards[i].x, height: '45%', width: '19%', border: getBorderColor(i, cards[i].intersected, cards.length)}} 
+          style={{position: 'absolute', top: cards[i].y, left: cards[i].x, height: '45%', width: '19%', border: getBorderColor(cards[i], 'keidaCard' in board ? true : false)}} 
           className="card" id={cards[i].suit + cards[i].value} draggable="false" 
           src={cardImages(`./${suitToText(cards[i].suit)+"/"+cards[i].value}.PNG`)} 
           alt={cardImages('./default.png')}></img>)
@@ -240,8 +246,12 @@ function App() {
         //Save board state
         gameSessionRef.child('board').on("value", (snapshot) => {
           if (snapshot.val()) {
-            setBoard(snapshot.val());
+            console.log("BOARD UPDATE DETECTED");
+            setBoard(snapshot.val().boardCards || []);
             setComponentArray(createBoardElements(snapshot.val()));
+          } else {
+            //Board empty if snapshot.val doesnt exist
+            setComponentArray([]);
           }
         });
 
@@ -251,6 +261,13 @@ function App() {
             setCurrentPlayer(snapshot.val());
           }
         });
+
+        //Save keida card on update
+        // gameSessionRef.child('keidaCard').on("value", (snapshot) => {
+        //   if (snapshot.val()) {
+        //     setKeidaCard(snapshot.val());
+        //   }
+        // });
 
         //Detect game start
         gameSessionRef.child('gameState').on("value", (snapshot) => {
@@ -315,7 +332,7 @@ function App() {
 
     </div>
     
-    <div id="board" boardCards={board.cards}> 
+    <div id="board" boardCards={board.boardCards}> 
       {componentArray}
     </div>
 

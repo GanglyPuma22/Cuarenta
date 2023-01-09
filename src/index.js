@@ -86,7 +86,14 @@ firebase.auth().signInAnonymously().catch((error) => {
 export function initRefs(gameSessionRef) {
   console.log(gameSessionRef);
   gameSessionRef.child('board').on("value", (snapshot) => {
-     board = snapshot.val() || [];
+    if (snapshot.val()) {
+      if ('boardCards' in snapshot.val()) {
+        board = snapshot.val().boardCards || [];
+      }
+    } else {
+      board = [];
+    }
+     
   });
   //Update local board var when board value changes
   // gameSessionRef.child('board').on("value", (snapshot) => {
