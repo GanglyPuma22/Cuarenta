@@ -128,9 +128,10 @@ function App() {
     return tempPlayers;
   }
 
-  function updateUserHand() {
-    setUserHand({1: playerCards[1], 2: playerCards[2], 3:playerCards[3], 4:playerCards[4], 5:playerCards[5]});
-    //console.log(userHand);
+  function updateUserHand(isFirstRound) {
+    console.log(playerCards);
+    isFirstRound ? setUserHand({1: playerCards[1], 2: playerCards[2], 3:playerCards[3], 4:playerCards[4], 5:playerCards[5]}) : 
+    setUserHand({1: playerCards[6], 2: playerCards[7], 3:playerCards[8], 4:playerCards[9], 5:playerCards[10]});
   }
 
   function getImagePath(num) {
@@ -276,7 +277,11 @@ function App() {
             //Hide game host 
             setGameHostView(false);
             //Show user cards
-            updateUserHand();
+            updateUserHand(true);
+          } else if (snapshot.val() == 'round1over') {
+            console.log("START ROUND 2");
+            //Show next set of user cards
+            updateUserHand(false)
           }
         });
       

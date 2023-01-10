@@ -24,8 +24,6 @@
     }
   }
   export const cardImages = require.context('../public/cards', true);
-  console.log(cardImages);
-  //const defaultImage = require.context('../public/cards/default.png', true);
 
   export function isPlayerTurn() {
       return playerId === playerTurnID;
@@ -132,27 +130,11 @@
       if (isPlayerTurn()) {
         this.updateLastPosition(e, position); //Update last position
         if (cardOnBoard(e)) {
-          //Update board variable and visuals
-          console.log(e);
-          console.log(board);
-
           let cardId = e.target.attributes.id.value;
           let card = new Card(cardId.charAt(0), cardId.charAt(1));
-          //let boardEl = e.target.offsetParent.offsetParent.children[1];
           let boardDim = document.getElementById('board').getBoundingClientRect();
-          card.x = position.x;
-          card.y = position.y;
           card.x = pixelsToPercent(e.clientX - boardDim.x - e.offsetX, boardDim.width);  //Subtract distance from left corner to user hand left corner
-          //console.log(e.clientY - e.offsetY - (userHandEl.offsetTop - boardEl.offsetTop));
           card.y = pixelsToPercent(e.clientY - boardDim.y - e.offsetY, boardDim.height); //- e.path[2].children[1].offsetTop; //Subtract distance from board top
-          //let board = this.props.boardCards;
-
-          //Check if card was intersected
-          //if (intersectedCard) {
-            //Check if intersection was a productive play
-            //checkPlay(board, card);
-            //If not valid play just draw it as normal moving it away from card
-          //}
 
           //Check play and update board with results
           let result = checkPlay(card);
@@ -162,48 +144,24 @@
           updateBoard(result.cardsToRemove);
           console.log(board);
 
-          //Update keida card seperately to give border color time to update
-          // firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
-          //   keidaCard: !cardsRemoved ? card : {},
-          // }); 
-
-          //TODO
-          //Check on limpia post keida
-
-          //Fix keida not updating board correctly
-          //BIG CHANGE: 
-          //It would probably be good to breakout the updating board functionality and checkplay functionality 
-          //This file is just supposed to take care of dragging
-          //UPDATE BOARD FUNCTION PROBLEM because cards to remove returns correctly
-          //Figure out how to deal with sums of cards
-          //Add banner above saying your name
-
-          //board.push(card);
-
+          //Update database with new board state and next player
           firebase.database().ref('gameSession/'+ this.props.gameId).update({ 
             currentPlayer: getNextPlayer(),
             board: {
                     boardCards: board, //cardsToRemove array of cards to take out of board var
                     keidaCard: result.cardsToRemove.length == 0 ? card : {}
-                   }
+                   },
+            //Check if first round is over
+            gameState: team1.cardsCollected + team2.cardsCollected + result.cardsCollected + board.length == 20 ? "round1over" : ""
           }); 
 
           //Update current player teams' points and cards collected
-          let teamNum = findTeam();
-          if (teamNum == 1) {
-            firebase.database().ref('gameSession/'+ this.props.gameId + '/team1').update({ 
-              points: team1.points + result.points, 
-              cardsCollected: team1.cardsCollected + result.cardsCollected
-            }); 
-          } else {
-            firebase.database().ref('gameSession/'+ this.props.gameId + '/team2').update({ 
-              points: team2.points + result.points, 
-              cardsCollected: team2.cardsCollected + result.cardsCollected
-            }); 
-          }
-          
-          //Delete played card
-          //e.target.style.display = 'none';
+          firebase.database().ref('gameSession/'+ this.props.gameId + '/team' + findTeam()).update({ 
+            points: findTeam() == 1 ? team1.points + result.points : team2.points + result.points, 
+            cardsCollected: findTeam() == 1 ? team1.cardsCollected + result.cardsCollected : team2.cardsCollected + result.cardsCollected
+          }); 
+
+          //Delete played card from DOM
           e.target.remove();
 
         } else { //Return to start if not placed on board
@@ -216,7 +174,6 @@
     };
   
     render() {
-      const dragHandlers = {onStart: this.onStart, onStop: this.onStop};
       const {intersecting, controlledPosition, clientPosition} = this.state;
 
       if (Object.keys(this.props.card).length === 0) {
@@ -230,90 +187,21 @@
   }
   
 
-  //Checks if board contains card with consecutive vlaue to input
-  // function containsConsecutive(board, cardVal) {
-  //   if (board.some(card => card.value === parseInt(cardVal) + 1)) {
-  //     /* vendors contains the element we're looking for */
-  //     const i = vendors.findIndex(e => e.Name === 'Magenic');
-  //   }
-
-  //   for(let card of board) {
-  //     if (mapCardVal(card.value) ==  cardVal + 1) {
-  //       document.getElementById(card.suit + card.value).style.border = "5px solid red";
-  //       return card;
-  //     }
-  //   }
-  // }
-
-
   //Function updates board by removing the cards in cardsToRemove array provided by checkplay function
-  //If cardsToRemove array is empty, simply push playedCard onto the board as the play
-  //Return if cards were removed or not
-
-  // function updateBoard(cardsToRemove, playedCard) {
-  //   if (cardsToRemove.length === 0) {
-  //     board.push(playedCard);
-  //   } else {
-  //   }
-  // }
   function updateBoard(cardsToRemove) {
-    //var tempBoard = board;
-    console.log(board);
-
     if (cardsToRemove.length != 0) {
       cardsToRemove.forEach(function (card) {
-        //If board contains a card to remove splice board array at that index
-        board.forEach(function(boardCard) {
-          if (boardCard.suit === card.suit && boardCard.value === card.value) {
-            console.log(boardCard);
-            removeCard(boardCard);
-            //board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
+        //If board contains a card to remove call splice on it to remove that element
+        for (let i = 0; i < board.length; i++) {
+          if (board[i].suit === card.suit && board[i].value === card.value) {
+            board.splice(i, 1);
           }
-        });
-        // console.log(board[board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)]);
-        // board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
-        //console.log(board);
-      });
-      // for (let card of cardsToRemove) {
-        
-      // }
-    }
-  }
-
-  // function updateBoard(cardsToRemove) {
-  //   var tempBoard = board;
-  //   console.log(tempBoard);
-
-  //   if (cardsToRemove.length != 0) {
-  //     cardsToRemove.forEach(function (card) {
-  //       //If board contains a card to remove splice board array at that index
-  //       tempBoard.forEach(function(boardCard) {
-  //         if (boardCard.suit === card.suit && boardCard.value === card.value) {
-  //           console.log(boardCard);
-  //           tempBoard = removeCard(tempBoard, boardCard);
-  //         }
-  //       });
-  //       // console.log(board[board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value)]);
-  //       // board.splice(board.findIndex(boardCard => boardCard.suit + boardCard.value === card.suit + card.value), 1)
-  //       //console.log(board);
-  //     });
-  //     // for (let card of cardsToRemove) {
-        
-  //     // }
-  //   }
-  //   console.log(tempBoard);
-  //   return tempBoard;
-  // }
-
-  function removeCard(card) {
-    for (let i = 0; i < board.length; i++) {
-        if (board[i].suit === card.suit && board[i].value === card.value) {
-          board.splice(i, 1);
         }
+      });
     }
-    console.log(board);
   }
 
+  //Function converts cards' values to numeric
   function mapCardVal(cardVal) {
     switch (cardVal) {
       case "A": 
@@ -329,11 +217,12 @@
     }
   }
 
-  //Function checks if last card intersection was a valid play
-  //board is current board state, card is object version of played card
-  //Returns cards to remove from board
+  /* Function checks if last card intersection was a valid play
+  * board is current board state, card is object version of played card
+  * Returns cards to remove from board
+  */
   function checkPlay(card) {
-    console.log(board);
+
     let res = {
       cardsCollected: 0,
       points: 0,
@@ -341,14 +230,12 @@
       board: board
     };
 
-    //Keep track of which cards to remove from board
-    let cardsToRemove = [];
-
     //If card was intersected check all rules resulting of that
     if(intersectedCard) {
-      console.log(intersectedCard.id[1]);
       //Check if two cards intersected have same value
       if (intersectedCard.id[1] == card.value) {
+        res.cardsCollected = 2;
+        
         let lastPlayedCard = board[board.length - 1];
 
         res.cardsToRemove.push( new Card(intersectedCard.id[0], intersectedCard.id[1]));//Remove intersected card
@@ -358,7 +245,6 @@
         if (lastPlayedCard.suit + lastPlayedCard.value === intersectedCard.id) {
           //Add two points and two cards to count
           res.points = 2;
-          res.cardsCollected = 2;
           console.log("KEIDA");
         }
 
@@ -374,31 +260,38 @@
           consecVal++;
           res.cardsCollected = res.cardsCollected + 1;
         }
+      } else { //Check for addtion rule
+        //Iterate over all pairs of cards on board
+        for (let pair of getPairs(card)) {
+          //If intersected card is part of a pair select that pair as chosen
+          if (pair.card1.suit + pair.card1.value === intersectedCard.id || pair.card2.suit + pair.card2.value === intersectedCard.id) {
+            document.getElementById(pair.card1.suit + pair.card1.value).style.border = "5px solid red";
+            document.getElementById(pair.card2.suit + pair.card2.value).style.border = "5px solid red";
+            //Remove played card
+            res.cardsToRemove.push(card); 
+            //Remove pair cards
+            res.cardsToRemove.push(pair.card1);
+            res.cardsToRemove.push(pair.card2);
+            //Update points
+            res.cardsCollected = res.cardsCollected + 3;
+          }
+          
+        }
       }
-      
-      //After updating board check for limpia 
-      if (cardsToRemove.length == board.length) {
-        res.points = 2;
+
+      //After updating board check for limpia, when board is cleared as a result of play
+      if (res.cardsToRemove.length == board.length + 1) {
+        res.points = 2; //Add points
         console.log("LIMPIA");
       }
-    } else { 
-      //Below concept is wrong approach. Check sum should be done on top of what is already done not instead of intersected card
-
-
-      //No card intersection check for sums, otherwise
-      //Check SUM, highlight cards red
-      //Get all pairs that sum to played card, only relevant to number cards
-      for (let pair of getPairs(card)) {
-        document.getElementById(pair.card1.suit + pair.card1.value).style.border = "5px solid red";
-        document.getElementById(pair.card2.suit + pair.card2.value).style.border = "5px solid red";
-      }
-    }
+    } 
 
     return res;
   }
 
   export default DraggableCard;
 
+  //Function returns an array containing all pairs of elements in input array
   function getAllPairs(arr) {
     var pairs = [];
     for (let i = 0; i < arr.length; i++) {
@@ -408,7 +301,8 @@
     }
     return pairs;
   }
- 
+  
+  //Function returns all pairs of card on board that sum to played card
   function getPairs(playedCard) {
     let pairs = getAllPairs(board);
     let playedCardVal = mapCardVal(playedCard.value);
@@ -417,30 +311,16 @@
 
     if (playedCardVal != 8 && playedCardVal != 9 && playedCardVal != 10 && playedCardVal != 1) {
       for (let i = 0; i < pairs.length; i++) {
+        //Check if the cards in a a pair sum to playedCard's value
         if (mapCardVal(pairs[i][1].value) + mapCardVal(pairs[i][0].value) == playedCardVal) {
-          console.log("PAIR FOUND: ",pairs[i]); 
+          //Add output to possible pairs that sum to playedCard's value
           output.push({
             card1: pairs[i][0],
             card2: pairs[i][1]
           });
         }
       }
-
-      // for (let boardCard of board) {
-      //   let boardCardVal = mapCardVal(boardCard);
-      //   if (boardCardVal != 8 && boardCardVal != 9 && boardCardVal != 10) {
-      //     if (board.some(card => boardCardVal + mapCardVal(card.value) === playedCardVal) &&
-      //         !pairs.some(pair => pair.card1.suit === boardCard.suit && pair.card1.value === boardCard.value)) {
-      //       pairs.push({
-      //         card1: board[board.findIndex(card => boardCardVal + mapCardVal(card.value) === playedCardVal)],
-      //         card2: boardCard
-      //       });
-            
-      //     }
-      //   }
-      // }
     }
-    console.log(output);
     return output;
   }
 
@@ -448,10 +328,12 @@
     return Math.round(dimension * parseInt(percentVal)/100, 1).toString() + 'px';
   }
 
+  //Function normalizes a pixel distance to a percentage to position cards on board in same spot on all player's screens
   function pixelsToPercent(pixelVal, dimension) {
     return Math.round(100 * parseInt(pixelVal)/dimension, 1).toString() + '%';
   }
 
+  //Function returns next player in sequence defined by game rules
   export function getNextPlayer() {
     let nextPlayer = {};
 
