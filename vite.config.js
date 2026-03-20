@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const configuredBase = env.VITE_BASE_PATH || '/cuarenta/';
+  const configuredBase = env.VITE_BASE_PATH || '/';
 
   return {
     plugins: [react()],

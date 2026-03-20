@@ -66,10 +66,11 @@ npm run build
 firebase deploy --only hosting,database
 ```
 
-If you deploy behind another web server instead of Firebase Hosting, serve the `dist/` folder at `/cuarenta/` and keep SPA rewrites enabled.
+If you deploy behind another web server instead of Firebase Hosting, serve the `dist/` folder at the path you built for. For `itsyasha.com/cuarenta`, build with `VITE_BASE_PATH=/cuarenta/` and keep SPA rewrites enabled.
 
 ## Current limitations / follow-up
 - No auth UI. Identity is just a local browser-generated player id plus chosen name.
 - Ronda-caida 10-point remembered bonus is not implemented yet.
 - The UI is functional and clean, but not a polished final visual design from Stitch.
 - Database rules are intentionally broad for rapid testing and should be hardened before public launch.
+ be hardened before public launch.
