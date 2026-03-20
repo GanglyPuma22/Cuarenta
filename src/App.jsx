@@ -71,6 +71,8 @@ function TurnOrder({ game, currentPlayerId }) {
 }
 
 function Board({ cards, deckRemaining, canLimpia }) {
+  const safeCards = Array.isArray(cards) ? cards : [];
+
   return (
     <section className="board-shell">
       <div className="board-hud">
@@ -78,7 +80,7 @@ function Board({ cards, deckRemaining, canLimpia }) {
         <div className="hud-chip accent">{canLimpia ? 'Limpia live' : 'No limpia bonus'}</div>
       </div>
       <div className="table-grid">
-        {cards.length ? cards.map((card) => (
+        {safeCards.length ? safeCards.map((card) => (
           <div key={card.id} className={`stitch-card board-card ${cardSuitClass(card)}`}>
             <div className="card-corner">{card.rank}</div>
             <div className="card-center">{card.suit}</div>
