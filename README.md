@@ -28,19 +28,21 @@ Rules source used: https://www.pagat.com/fishing/cuarenta.html
 - Firebase Realtime Database
 
 ## Local setup
-1. Copy `.env.example` to `.env`
-2. Install deps:
+1. Install deps:
    ```bash
    npm install
    ```
-3. Run dev server:
+2. Run dev server:
    ```bash
    npm run dev
    ```
+3. Open the local URL Vite prints (usually `http://localhost:5173/`).
 4. Build:
    ```bash
    npm run build
    ```
+
+`.env` is optional here because the Firebase web config already falls back to the known project values. If you want overrides, copy `.env.example` to `.env`.
 
 ## Firebase notes
 This app expects the Firebase project `cuarenta-dfbf1`.
