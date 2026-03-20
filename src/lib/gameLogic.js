@@ -221,13 +221,14 @@ export function getVisibleHand(round, playerId) {
 export function getLegalMoves(round, playerId) {
   if (!round || round.turnPlayerId !== playerId || round.status === 'finished') return [];
   const hand = visibleHandForPlayer(round, playerId);
+  const board = Array.isArray(round.board) ? round.board : [];
   const moves = [];
 
   for (const card of hand) {
     moves.push({ type: 'trail', playedCardId: card.id, label: `${card.rank}${card.suit} to table` });
 
-    for (const target of round.board.filter((boardCard) => boardCard.rank === card.rank)) {
-      const captured = applySequence(round.board, [target], card);
+    for (const target of board.filter((boardCard) => boardCard.rank === card.rank)) {
+      const captured = applySequence(board, [target], card);
       moves.push({
         type: 'match',
         playedCardId: card.id,
