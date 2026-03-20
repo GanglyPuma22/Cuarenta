@@ -324,8 +324,9 @@ export default function App() {
   const seating = game?.seating?.map((id) => game.players[id]);
   const teams = teamSummary(game);
   const round = game?.round;
-  const visibleHand = round ? getVisibleHand(round, playerId) : [];
-  const legalMoves = round ? getLegalMoves(round, playerId) : [];
+  const boardCards = Array.isArray(round?.board) ? round.board : [];
+  const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
+  const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
   const isHost = game?.hostId === playerId;
   const isYourTurn = round?.turnPlayerId === playerId;
   const canLimpia = round ? (game.scores[round.teamsByPlayer[playerId]?.teamId] || 0) < 38 : false;

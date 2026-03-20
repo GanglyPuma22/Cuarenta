@@ -323,6 +323,7 @@ function finalizeHand(game) {
 export function applyMove(game, playerId, move) {
   if (!game?.round || game.status !== 'playing') throw new Error('Game is not active.');
   const round = structuredClone(game.round);
+  round.board = Array.isArray(round.board) ? round.board : [];
   if (round.turnPlayerId !== playerId) throw new Error('Not your turn.');
 
   const legalMoves = getLegalMoves(round, playerId);
