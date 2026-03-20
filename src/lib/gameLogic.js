@@ -325,6 +325,19 @@ export function applyMove(game, playerId, move) {
   if (!game?.round || game.status !== 'playing') throw new Error('Game is not active.');
   const round = structuredClone(game.round);
   round.board = Array.isArray(round.board) ? round.board : [];
+  round.capturePiles = {
+    A: Array.isArray(round.capturePiles?.A) ? round.capturePiles.A : [],
+    B: Array.isArray(round.capturePiles?.B) ? round.capturePiles.B : [],
+  };
+  round.capturedCardCount = {
+    A: round.capturedCardCount?.A || 0,
+    B: round.capturedCardCount?.B || 0,
+  };
+  round.scores = {
+    A: round.scores?.A || 0,
+    B: round.scores?.B || 0,
+  };
+  round.events = Array.isArray(round.events) ? round.events : [];
   if (round.turnPlayerId !== playerId) throw new Error('Not your turn.');
 
   const legalMoves = getLegalMoves(round, playerId);
