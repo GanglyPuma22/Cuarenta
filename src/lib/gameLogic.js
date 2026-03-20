@@ -238,9 +238,9 @@ export function getLegalMoves(round, playerId) {
     }
 
     if (NUMERIC_RANKS.has(card.rank)) {
-      const additions = subsetCaptures(round.board, card.value);
+      const additions = subsetCaptures(board, card.value);
       for (const set of additions) {
-        const captured = applySequence(round.board, set, card);
+        const captured = applySequence(board, set, card);
         const text = set.map((c) => `${c.rank}${c.suit}`).join(' + ');
         moves.push({
           type: 'add',
