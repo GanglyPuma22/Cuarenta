@@ -3,6 +3,11 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { databaseUrl, db } from './lib/firebase';
 import { getLocalPlayerId, getSavedName, saveName } from './lib/localPlayer';
 import { applyMove, createInitialGameState, generateGameCode, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
+
+function moveKey(move) {
+  return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
+}
 
 function cardText(card) {
   return `${card.rank}${card.suit}`;
@@ -28,8 +33,24 @@ function cardSuitClass(card) {
   return card?.suit === '♥' || card?.suit === '♦' ? 'is-red' : 'is-dark';
 }
 
+function stampSessionMetadata(target, { now = Date.now(), action, actorId }) {
+  target.updatedAt = now;
+  target.lastActivityAt = now;
+  target.session = {
+    version: 2,
+    reconnectable: true,
+    createdAt: target.session?.createdAt || target.createdAt || now,
+    startedAt: target.session?.startedAt || target.startedAt || null,
+    finishedAt: target.session?.finishedAt || target.finishedAt || null,
+    updatedAt: now,
+    lastMoveAt: target.session?.lastMoveAt || null,
+    lastAction: action,
+    lastActorId: actorId,
+  };
+}
+
 function GameCode({ code }) {
-  return <div className="share-pill">Share code: <strong>{code}</strong></div>;
+  return <div className="share-pill">Game <strong>{code}</strong></div>;
 }
 
 function LobbySeat({ player, isCurrent, slot }) {
@@ -70,59 +91,132 @@ function TurnOrder({ game, currentPlayerId }) {
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia }) {
+function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, directDropMoves, trailMove, dragCardId, onPlay }) {
   const safeCards = Array.isArray(cards) ? cards : [];
+  const highlighted = new Set(highlightedCaptureIds || []);
+  const trailArmed = Boolean(trailMove) && dragCardId === trailMove.playedCardId;
 
   return (
-    <section className="board-shell">
+    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''}`}>
       <div className="board-hud">
         <div className="hud-chip">Deck: {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia live' : 'No limpia bonus'}</div>
       </div>
-      <div className="table-grid">
-        {safeCards.length ? safeCards.map((card) => (
-          <div key={card.id} className={`stitch-card board-card ${cardSuitClass(card)}`}>
-            <div className="card-corner">{card.rank}</div>
-            <div className="card-center">{card.suit}</div>
-            <div className="card-corner bottom">{card.rank}</div>
-          </div>
-        )) : <div className="empty-table">No cards on the table yet</div>}
+      <div
+        className={`table-grid ${trailArmed ? 'is-drop-target' : ''}`}
+        onDragOver={(event) => {
+          if (!trailArmed) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={(event) => {
+          if (!trailArmed || !trailMove) return;
+          event.preventDefault();
+          onPlay(trailMove);
+        }}
+      >
+        {safeCards.length ? safeCards.map((card) => {
+          const directMove = directDropMoves?.[card.id];
+          const canDirectDrop = Boolean(directMove) && dragCardId === directMove.playedCardId;
+
+          return (
+            <div
+              key={card.id}
+              className={`stitch-card board-card ${cardSuitClass(card)} ${highlighted.has(card.id) ? 'is-highlighted' : ''} ${directMove ? 'is-click-target' : ''} ${canDirectDrop ? 'is-direct-target' : ''}`}
+              onClick={() => directMove && onPlay(directMove)}
+              onDragOver={(event) => {
+                if (!canDirectDrop) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(event) => {
+                if (!canDirectDrop) return;
+                event.preventDefault();
+                event.stopPropagation();
+                onPlay(directMove);
+              }}
+            >
+              <div className="card-corner">{card.rank}</div>
+              <div className="card-center">{card.suit}</div>
+              <div className="card-corner bottom">{card.rank}</div>
+            </div>
+          );
+        }) : <div className="empty-table">No cards on the table yet</div>}
       </div>
     </section>
   );
 }
 
-function MovePicker({ hand, legalMoves, onPlay, isYourTurn }) {
-  const [selectedCardId, setSelectedCardId] = useState('');
-  const [selectedMoveKey, setSelectedMoveKey] = useState('');
+function MoveOptionCard({ move, boardCardsById, isPreviewed, dragCardId, onPreview, onPlay }) {
+  const captureCards = (move.captureIds || []).map((id) => boardCardsById[id]).filter(Boolean);
+  const canDrop = dragCardId === move.playedCardId;
+  const kindLabel = move.type === 'trail' ? 'Trail' : move.type === 'match' ? 'Match' : 'Add capture';
 
-  useEffect(() => {
-    if (!hand.some((card) => card.id === selectedCardId)) {
-      setSelectedCardId(hand[0]?.id || '');
-      setSelectedMoveKey('');
-    }
-  }, [hand, selectedCardId]);
+  return (
+    <button
+      type="button"
+      className={`move-option ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
+      onClick={() => onPlay(move)}
+      onMouseEnter={() => onPreview(moveKey(move))}
+      onMouseLeave={() => onPreview('')}
+      onFocus={() => onPreview(moveKey(move))}
+      onBlur={() => onPreview('')}
+      onDragOver={(event) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      }}
+      onDrop={(event) => {
+        if (!canDrop) return;
+        event.preventDefault();
+        onPlay(move);
+      }}
+    >
+      <div className="move-option-head">
+        <span className="move-kind">{kindLabel}</span>
+        <span className="move-kicker">{move.type === 'trail' ? 'Drop on table' : `${captureCards.length} captured`}</span>
+      </div>
+      {captureCards.length ? (
+        <div className="move-capture-row">
+          {captureCards.map((card) => <span key={card.id} className={`mini-card ${cardSuitClass(card)}`}>{cardText(card)}</span>)}
+        </div>
+      ) : (
+        <div className="move-empty-target">Open table drop</div>
+      )}
+      <div className="move-label">{move.label}</div>
+    </button>
+  );
+}
 
-  const movesForCard = legalMoves.filter((move) => move.playedCardId === selectedCardId);
-  const selectedMove = movesForCard.find((move) => `${move.type}:${(move.captureIds || []).join(',')}` === selectedMoveKey) || movesForCard[0];
-
-  useEffect(() => {
-    if (movesForCard.length) {
-      setSelectedMoveKey(`${movesForCard[0].type}:${(movesForCard[0].captureIds || []).join(',')}`);
-    } else {
-      setSelectedMoveKey('');
-    }
-  }, [selectedCardId, legalMoves]);
+function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, selectedCardId, setSelectedCardId, dragCardId, setDragCardId, previewMoveKey, setPreviewMoveKey }) {
+  const activeCardId = dragCardId || selectedCardId || hand[0]?.id || '';
+  const movesForCard = legalMoves.filter((move) => move.playedCardId === activeCardId);
 
   return (
     <section className="hand-shell">
       <div className="hand-head">
         <span>Your hand</span>
-        <span className="hand-kicker">Cuarenta</span>
+        <span className="hand-kicker">Drag cards like a civilized person</span>
       </div>
       <div className="hand-row stitch-hand-row">
         {hand.map((card) => (
-          <button key={card.id} className={`stitch-card hand-card ${cardSuitClass(card)} ${selectedCardId === card.id ? 'selected' : ''}`} onClick={() => setSelectedCardId(card.id)}>
+          <button
+            key={card.id}
+            type="button"
+            draggable={isYourTurn}
+            className={`stitch-card hand-card ${cardSuitClass(card)} ${selectedCardId === card.id ? 'selected' : ''} ${dragCardId === card.id ? 'dragging' : ''}`}
+            onClick={() => setSelectedCardId(card.id)}
+            onDragStart={(event) => {
+              setSelectedCardId(card.id);
+              setDragCardId(card.id);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', card.id);
+            }}
+            onDragEnd={() => {
+              setDragCardId('');
+              setPreviewMoveKey('');
+            }}
+          >
             <div className="card-corner">{card.rank}</div>
             <div className="card-center">{card.suit}</div>
             <div className="card-corner bottom">{card.rank}</div>
@@ -131,18 +225,20 @@ function MovePicker({ hand, legalMoves, onPlay, isYourTurn }) {
       </div>
       {isYourTurn ? (
         <div className="play-controls">
-          <label>
-            Available plays
-            <select value={selectedMoveKey} onChange={(event) => setSelectedMoveKey(event.target.value)}>
-              {movesForCard.map((move) => {
-                const key = `${move.type}:${(move.captureIds || []).join(',')}`;
-                return <option key={key} value={key}>{move.label}</option>;
-              })}
-            </select>
-          </label>
-          <button className="primary-button" disabled={!selectedMove} onClick={() => selectedMove && onPlay(selectedMove)}>
-            Play selected move
-          </button>
+          <div className="ghost-note">Drag onto the table to trail, onto a highlighted board card to match, or onto one of the capture lanes below.</div>
+          <div className="move-options-grid">
+            {movesForCard.map((move) => (
+              <MoveOptionCard
+                key={moveKey(move)}
+                move={move}
+                boardCardsById={boardCardsById}
+                isPreviewed={previewMoveKey === moveKey(move)}
+                dragCardId={dragCardId}
+                onPreview={setPreviewMoveKey}
+                onPlay={onPlay}
+              />
+            ))}
+          </div>
         </div>
       ) : <div className="muted-note">Waiting for your turn.</div>}
     </section>
@@ -188,16 +284,76 @@ function ActivityPanel({ round, game, currentPlayerId }) {
 }
 
 export default function App() {
+  const [{ initialUrlCode, initialSavedSession }] = useState(() => {
+    const urlCode = getGameCodeFromUrl();
+    const savedSession = getSavedSession();
+
+    return {
+      initialUrlCode: urlCode,
+      initialSavedSession: savedSession,
+    };
+  });
+
   const [name, setName] = useState(getSavedName());
-  const [joinCode, setJoinCode] = useState('');
-  const [gameCode, setGameCode] = useState('');
+  const [joinCode, setJoinCode] = useState(initialUrlCode || '');
+  const [gameCode, setGameCode] = useState(initialUrlCode || initialSavedSession?.gameCode || '');
+  const [savedSession, setSavedSession] = useState(initialSavedSession);
   const [game, setGame] = useState(null);
+  const [gameLoadState, setGameLoadState] = useState(gameCode ? 'loading' : 'idle');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [dbStatus, setDbStatus] = useState('checking');
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState('');
+  const [dragCardId, setDragCardId] = useState('');
+  const [previewMoveKey, setPreviewMoveKey] = useState('');
 
   const playerId = useMemo(() => getLocalPlayerId(), []);
   const gameRef = useMemo(() => (gameCode ? ref(db, `games/${gameCode}`) : null), [gameCode]);
+
+  function rememberSession(code) {
+    saveGameSession(code);
+    setSavedSession({ gameCode: code, lastVisitedAt: Date.now() });
+  }
+
+  function forgetSavedGame() {
+    clearSavedSession();
+    setSavedSession(null);
+    if (savedSession?.gameCode === gameCode) {
+      setGameCode('');
+      setGame(null);
+      setGameLoadState('idle');
+    }
+  }
+
+  function returnHome() {
+    setGameCode('');
+    setGame(null);
+    setGameLoadState('idle');
+    setError('');
+  }
+
+  async function copyShareLink() {
+    const shareUrl = buildGameUrl(gameCode);
+    if (!shareUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setLinkCopied(true);
+    } catch {
+      window.prompt('Copy this rejoin link:', shareUrl);
+    }
+  }
+
+  useEffect(() => {
+    if (!linkCopied) return undefined;
+    const timer = window.setTimeout(() => setLinkCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [linkCopied]);
+
+  useEffect(() => {
+    syncGameUrl(gameCode);
+  }, [gameCode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,17 +372,77 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!gameRef) return undefined;
+    if (!gameRef) {
+      setGame(null);
+      setGameLoadState('idle');
+      return undefined;
+    }
+
+    setGame(null);
+    setGameLoadState('loading');
+
     return onValue(
       gameRef,
       (snapshot) => {
+        if (!snapshot.exists()) {
+          setGame(null);
+          setGameLoadState('missing');
+          return;
+        }
+
         setGame(snapshot.val());
+        setGameLoadState('loaded');
       },
       (firebaseError) => {
         setError(firebaseError.message || 'Realtime sync failed.');
+        setGameLoadState('missing');
       }
     );
   }, [gameRef]);
+
+  useEffect(() => {
+    if (game?.players?.[playerId] && game.code && savedSession?.gameCode !== game.code) {
+      rememberSession(game.code);
+    }
+  }, [game?.code, game?.players?.[playerId], playerId, savedSession?.gameCode]);
+
+  const seating = game?.seating?.map((id) => game.players[id]);
+  const isParticipant = Boolean(game?.players?.[playerId]);
+  const teams = teamSummary(game);
+  const round = game?.round;
+  const boardCards = Array.isArray(round?.board) ? round.board : [];
+  const boardCardsById = useMemo(
+    () => Object.fromEntries(boardCards.map((card) => [card.id, card])),
+    [boardCards]
+  );
+  const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
+  const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
+  const isHost = game?.hostId === playerId;
+  const isYourTurn = round?.turnPlayerId === playerId;
+  const currentTeamId = round?.teamsByPlayer?.[playerId]?.teamId;
+  const canLimpia = round ? ((game?.scores?.[currentTeamId] || 0) < 38) : false;
+  const activeCardId = dragCardId || selectedCardId || visibleHand[0]?.id || '';
+  const movesForActiveCard = legalMoves.filter((move) => move.playedCardId === activeCardId);
+  const previewedMove = movesForActiveCard.find((move) => moveKey(move) === previewMoveKey) || null;
+  const trailMove = movesForActiveCard.find((move) => move.type === 'trail') || null;
+  const directDropMoves = useMemo(() => {
+    const entries = movesForActiveCard
+      .filter((move) => move.type === 'match' && move.targetIds?.length === 1)
+      .map((move) => [move.targetIds[0], move]);
+    return Object.fromEntries(entries);
+  }, [movesForActiveCard]);
+
+  useEffect(() => {
+    if (!visibleHand.some((card) => card.id === selectedCardId)) {
+      setSelectedCardId(visibleHand[0]?.id || '');
+    }
+  }, [visibleHand, selectedCardId]);
+
+  useEffect(() => {
+    if (!movesForActiveCard.some((move) => moveKey(move) === previewMoveKey)) {
+      setPreviewMoveKey('');
+    }
+  }, [movesForActiveCard, previewMoveKey]);
 
   async function createGame() {
     const trimmed = name.trim();
@@ -250,6 +466,8 @@ export default function App() {
         created = result.committed;
         if (!created) code = generateGameCode();
       }
+      rememberSession(code);
+      setJoinCode(code);
       setGameCode(code);
     } catch (transactionError) {
       setError(transactionError.message || 'Unable to create game. Check Firebase database rules and config.');
@@ -260,8 +478,8 @@ export default function App() {
 
   async function joinGame() {
     const trimmed = name.trim();
-    const code = joinCode.trim().toUpperCase();
-    if (!trimmed || !code) return setError('Enter your name and a game code.');
+    const code = normalizeGameCode(gameCode || joinCode);
+    if (!trimmed || !isValidGameCode(code)) return setError('Enter your name and a valid 6-character game code.');
     if (dbStatus === 'read-denied') return setError('RTDB public reads are currently blocked, so joining cannot work yet. Update the live database rules first.');
     saveName(trimmed);
     setBusy(true);
@@ -272,25 +490,54 @@ export default function App() {
       const existingSnapshot = await get(joinRef);
       const existing = existingSnapshot.val();
       if (!existing) throw new Error('Game not found.');
-      if (existing.status !== 'lobby') throw new Error('Game already started.');
-      if (!existing.players?.[playerId] && (existing.seating || []).length >= 4) throw new Error('Game is full.');
+
+      if (existing.players?.[playerId]) {
+        const result = await runTransaction(joinRef, (current) => {
+          if (!current?.players?.[playerId]) return current;
+          const now = Date.now();
+          current.players[playerId] = {
+            ...current.players[playerId],
+            name: trimmed,
+            lastSeenAt: now,
+            rejoinedAt: now,
+            reconnectCount: (current.players[playerId].reconnectCount || 0) + 1,
+          };
+          stampSessionMetadata(current, { now, action: 'player_rejoined', actorId: playerId });
+          return current;
+        }, { applyLocally: false });
+
+        if (!result?.snapshot?.exists()) throw new Error('Game not found.');
+        rememberSession(code);
+        setJoinCode(code);
+        setGameCode(code);
+        return;
+      }
+
+      if (existing.status !== 'lobby') throw new Error('Game already started. Reopen the original game link on the same browser to reconnect.');
+      if ((existing.seating || []).length >= 4) throw new Error('Game is full.');
 
       const result = await runTransaction(joinRef, (current) => {
         if (!current) return current;
         current.players ||= {};
         current.seating ||= [];
+        const now = Date.now();
         current.players[playerId] = {
           id: playerId,
           name: trimmed,
-          joinedAt: Date.now(),
+          joinedAt: now,
+          lastSeenAt: now,
+          reconnectCount: 0,
           isHost: current.hostId === playerId,
         };
         if (!current.seating.includes(playerId)) current.seating.push(playerId);
         current.lobbyMessage = current.seating.length === 4 ? 'Ready for host review' : 'Waiting for players';
+        stampSessionMetadata(current, { now, action: 'player_joined', actorId: playerId });
         return current;
       }, { applyLocally: false });
 
       if (!result?.snapshot?.exists()) throw new Error('Game not found.');
+      rememberSession(code);
+      setJoinCode(code);
       setGameCode(code);
     } catch (transactionError) {
       setError(transactionError.message || 'Unable to join game.');
@@ -313,7 +560,9 @@ export default function App() {
     setBusy(false);
   }
 
-  async function playMove(move) {
+  async function playChosenMove(move) {
+    setDragCardId('');
+    setPreviewMoveKey('');
     setBusy(true);
     setError('');
     await runTransaction(gameRef, (current) => {
@@ -323,15 +572,9 @@ export default function App() {
     setBusy(false);
   }
 
-  const seating = game?.seating?.map((id) => game.players[id]);
-  const teams = teamSummary(game);
-  const round = game?.round;
-  const boardCards = Array.isArray(round?.board) ? round.board : [];
-  const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
-  const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
-  const isHost = game?.hostId === playerId;
-  const isYourTurn = round?.turnPlayerId === playerId;
-  const canLimpia = round ? (game.scores[round.teamsByPlayer[playerId]?.teamId] || 0) < 38 : false;
+  const showHome = !gameCode || gameLoadState === 'missing';
+  const showGameChrome = Boolean(gameCode) && gameLoadState !== 'missing';
+  const shareUrl = showGameChrome ? buildGameUrl(gameCode) : '';
 
   return (
     <main className="cuarenta-app">
@@ -344,18 +587,24 @@ export default function App() {
           </nav>
         </div>
         <div className="topbar-actions">
-          {game?.code ? <GameCode code={game.code} /> : null}
-          <button className="header-button">Share Code</button>
+          {showGameChrome ? <button type="button" className="secondary-chip" onClick={returnHome}>Home</button> : null}
+          {showGameChrome ? <GameCode code={gameCode} /> : null}
+          {showGameChrome ? <button type="button" className="header-button" onClick={copyShareLink}>{linkCopied ? 'Link copied' : 'Share link'}</button> : null}
         </div>
       </header>
 
-      {!gameCode ? (
+      {showHome ? (
         <section className="lobby-shell invite-mode">
           <div className="invite-copy">
             <div className="eyebrow">Lobby Invitation</div>
             <h1>Host or Join a Match</h1>
-            <p>Classic four-player Cuarenta with a private code and a host-controlled lobby.</p>
+            <p>Classic four-player Cuarenta with reconnectable links, saved local sessions, and drag-first card play.</p>
           </div>
+          {gameLoadState === 'missing' && gameCode ? (
+            <section className="notice-card">
+              Game <strong>{gameCode}</strong> is not in the database anymore. If this was your last session, you can forget it below and start fresh.
+            </section>
+          ) : null}
           <section className="auth-card">
             <label>
               Your name
@@ -365,10 +614,23 @@ export default function App() {
               <button className="primary-button" disabled={busy || dbStatus === 'checking'} onClick={createGame}>Host game</button>
             </div>
             <div className="join-inline">
-              <input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder="Enter code" maxLength={6} />
+              <input value={joinCode} onChange={(event) => setJoinCode(normalizeGameCode(event.target.value))} placeholder="Enter code" maxLength={6} />
               <button className="secondary-button" disabled={busy || dbStatus === 'checking'} onClick={joinGame}>Join</button>
             </div>
+            <div className="ghost-note">When you join from a link, this browser remembers the session so a refresh does not nuke the match.</div>
           </section>
+          {savedSession ? (
+            <section className="resume-card">
+              <div>
+                <div className="resume-title">Resume saved session</div>
+                <div className="resume-copy">{savedSession.gameCode} is still pinned to this browser.</div>
+              </div>
+              <div className="resume-actions">
+                <button type="button" className="secondary-button" onClick={() => setGameCode(savedSession.gameCode)}>Resume</button>
+                <button type="button" className="text-button" onClick={forgetSavedGame}>Forget</button>
+              </div>
+            </section>
+          ) : null}
         </section>
       ) : null}
 
@@ -378,7 +640,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {gameCode && !game ? <section className="notice-card">Loading game…</section> : null}
+      {gameCode && gameLoadState === 'loading' ? <section className="notice-card">Loading game…</section> : null}
 
       {game && game.status === 'lobby' ? (
         <section className="lobby-shell">
@@ -387,33 +649,79 @@ export default function App() {
             <h1>{game.code.split('').join('-')}</h1>
             <p>{game.lobbyMessage || 'Share this code with three friends to start a classic match of Cuarenta.'}</p>
           </div>
+          <section className="notice-card slim-note">
+            Rejoin URL: <strong>{shareUrl}</strong>
+          </section>
           <div className="lobby-grid">
             {[0, 1, 2, 3].map((index) => <LobbySeat key={index} slot={index + 1} player={seating?.[index]} isCurrent={seating?.[index]?.id === playerId} />)}
           </div>
-          <div className="lobby-actions">
-            {isHost ? <button className="primary-button wide" disabled={busy || (game.seating || []).length !== 4} onClick={startGame}>Start Game</button> : null}
-            <div className="lobby-footnote">Requires 4 players to begin</div>
-          </div>
+          {!isParticipant ? (
+            <section className="auth-card join-lobby-card">
+              <label>
+                Your name
+                <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} placeholder="Mateo V." />
+              </label>
+              <button className="primary-button" disabled={busy || dbStatus === 'checking'} onClick={joinGame}>Take a seat</button>
+              <div className="ghost-note">Open this same link later on this browser and you will land back in the game instead of being locked out.</div>
+            </section>
+          ) : (
+            <div className="lobby-actions">
+              {isHost ? <button className="primary-button wide" disabled={busy || (game.seating || []).length !== 4} onClick={startGame}>Start Game</button> : null}
+              <div className="lobby-footnote">Requires 4 players to begin</div>
+            </div>
+          )}
         </section>
       ) : null}
 
-      {game && round ? (
-        <section className="game-layout">
-          <TurnOrder game={game} currentPlayerId={playerId} />
-          <section className="center-column">
-            <div className="team-stats-row">
-              {teams.map((team) => <TeamCard key={team.teamId} team={team} />)}
-              <div className="phase-card">
-                <div className="team-stat-title">Current round</div>
-                <div className="phase-name">Hand {round.handNumber} · Deal {round.activeDeal}</div>
-                <div className="phase-turn">Turn: {game.players[round.turnPlayerId]?.name}</div>
-              </div>
-            </div>
-            <Board cards={round.board} deckRemaining={round.deckRemaining} canLimpia={canLimpia} />
-            <MovePicker hand={visibleHand} legalMoves={legalMoves} onPlay={playMove} isYourTurn={isYourTurn} />
-            {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
+      {game && round && isParticipant ? (
+        <>
+          <section className="notice-card slim-note">
+            Refresh-safe session is active for <strong>{game.code}</strong>. Reopen the same link on this browser to reconnect mid-match.
           </section>
-          <ActivityPanel round={round} game={game} currentPlayerId={playerId} />
+          <section className="game-layout">
+            <TurnOrder game={game} currentPlayerId={playerId} />
+            <section className="center-column">
+              <div className="team-stats-row">
+                {teams.map((team) => <TeamCard key={team.teamId} team={team} />)}
+                <div className="phase-card">
+                  <div className="team-stat-title">Current round</div>
+                  <div className="phase-name">Hand {round.handNumber} · Deal {round.activeDeal}</div>
+                  <div className="phase-turn">Turn: {game.players[round.turnPlayerId]?.name}</div>
+                </div>
+              </div>
+              <Board
+                cards={round.board}
+                deckRemaining={round.deckRemaining}
+                canLimpia={canLimpia}
+                highlightedCaptureIds={previewedMove?.captureIds || []}
+                directDropMoves={directDropMoves}
+                trailMove={trailMove}
+                dragCardId={dragCardId}
+                onPlay={playChosenMove}
+              />
+              <MovePicker
+                hand={visibleHand}
+                legalMoves={legalMoves}
+                boardCardsById={boardCardsById}
+                onPlay={playChosenMove}
+                isYourTurn={isYourTurn}
+                selectedCardId={selectedCardId}
+                setSelectedCardId={setSelectedCardId}
+                dragCardId={dragCardId}
+                setDragCardId={setDragCardId}
+                previewMoveKey={previewMoveKey}
+                setPreviewMoveKey={setPreviewMoveKey}
+              />
+              {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
+            </section>
+            <ActivityPanel round={round} game={game} currentPlayerId={playerId} />
+          </section>
+        </>
+      ) : null}
+
+      {game && round && !isParticipant ? (
+        <section className="notice-card">
+          This game is already in progress. Mid-game entry is intentionally limited to the original browser session for that seat, so use the original rejoin link from the player who was already in the game.
         </section>
       ) : null}
 

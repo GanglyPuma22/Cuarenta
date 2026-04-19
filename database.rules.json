@@ -3,7 +3,14 @@
     "games": {
       ".read": true,
       "$code": {
-        ".write": true
+        ".write": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
+        ".validate": "newData.exists() && newData.child('code').isString() && newData.child('code').val() === $code",
+        "code": {
+          ".validate": "newData.isString() && newData.val() === $code"
+        },
+        "$other": {
+          ".validate": true
+        }
       }
     }
   }
