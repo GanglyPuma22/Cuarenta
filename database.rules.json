@@ -3,7 +3,61 @@
     "games": {
       ".read": true,
       "$code": {
-        ".write": true
+        ".write": "newData.exists() && $code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.child('code').val() === $code",
+        ".validate": "newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && newData.child('lastActivityAt').isNumber() && newData.child('players').childrenCount() > 0 && newData.child('players').childrenCount() <= 4 && newData.child('seating').childrenCount() > 0 && newData.child('seating').childrenCount() <= 4 && newData.child('scores').hasChildren(['A', 'B']) && newData.child('players').hasChild(newData.child('hostId').val())",
+        "code": {
+          ".validate": "newData.isString() && newData.val() === $code"
+        },
+        "status": {
+          ".validate": "newData.isString() && (newData.val() === 'lobby' || newData.val() === 'playing' || newData.val() === 'finished')"
+        },
+        "hostId": {
+          ".validate": "newData.isString() && newData.val().matches(/^player_[a-z0-9-]{8,}$/)"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "lastActivityAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "startedAt": {
+          ".validate": "!newData.exists() || newData.isNumber()"
+        },
+        "finishedAt": {
+          ".validate": "!newData.exists() || newData.isNumber()"
+        },
+        "winner": {
+          ".validate": "!newData.exists() || newData.val() === 'A' || newData.val() === 'B'"
+        },
+        "lobbyMessage": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 120)"
+        },
+        "players": {
+          "$playerId": {
+            ".validate": "$playerId.matches(/^player_[a-z0-9-]{8,}$/) && newData.hasChildren(['id', 'name', 'joinedAt', 'isHost']) && newData.child('id').val() === $playerId && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 24 && newData.child('joinedAt').isNumber() && newData.child('isHost').isBoolean() && (!newData.child('lastSeenAt').exists() || newData.child('lastSeenAt').isNumber()) && (!newData.child('rejoinedAt').exists() || newData.child('rejoinedAt').isNumber()) && (!newData.child('reconnectCount').exists() || newData.child('reconnectCount').isNumber())"
+          }
+        },
+        "seating": {
+          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          "$seat": {
+            ".validate": "newData.isString()"
+          }
+        },
+        "scores": {
+          ".validate": "newData.hasChildren(['A', 'B']) && newData.child('A').isNumber() && newData.child('B').isNumber() && newData.child('A').val() >= 0 && newData.child('B').val() >= 0 && newData.child('A').val() <= 40 && newData.child('B').val() <= 40"
+        },
+        "session": {
+          ".validate": "newData.hasChildren(['version', 'reconnectable', 'createdAt', 'updatedAt']) && newData.child('version').val() === 2 && newData.child('reconnectable').val() === true && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && (!newData.child('startedAt').exists() || newData.child('startedAt').isNumber()) && (!newData.child('finishedAt').exists() || newData.child('finishedAt').isNumber()) && (!newData.child('lastMoveAt').exists() || newData.child('lastMoveAt').isNumber()) && (!newData.child('lastAction').exists() || newData.child('lastAction').isString()) && (!newData.child('lastActorId').exists() || newData.child('lastActorId').isString())"
+        },
+        "round": {
+          ".validate": "!newData.exists() || newData.hasChildren(['handNumber', 'dealerIndex', 'turnOrder', 'turnPlayerId', 'activeDeal', 'playsInCurrentDeal', 'hands', 'board', 'capturePiles', 'capturedCardCount', 'perDealHands', 'events', 'teamsByPlayer', 'scores'])"
+        },
+        "$other": {
+          ".validate": true
+        }
       }
     }
   }

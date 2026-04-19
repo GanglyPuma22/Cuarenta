@@ -104,25 +104,58 @@ export function assignTeams(players) {
   }, {});
 }
 
-export function createInitialGameState(hostName, hostId) {
+function withSessionMeta(game, meta = {}) {
+  const now = meta.now ?? Date.now();
+  const previousSession = game.session || {};
+
   return {
+    ...game,
+    updatedAt: now,
+    lastActivityAt: now,
+    session: {
+      version: 2,
+      reconnectable: true,
+      createdAt: previousSession.createdAt || game.createdAt || now,
+      startedAt: meta.startedAt ?? previousSession.startedAt ?? game.startedAt ?? null,
+      finishedAt: meta.finishedAt ?? previousSession.finishedAt ?? game.finishedAt ?? null,
+      updatedAt: now,
+      lastMoveAt: meta.lastMoveAt ?? previousSession.lastMoveAt ?? null,
+      lastAction: meta.lastAction ?? previousSession.lastAction ?? null,
+      lastActorId: meta.lastActorId ?? previousSession.lastActorId ?? null,
+    },
+  };
+}
+
+export function createInitialGameState(hostName, hostId) {
+  const now = Date.now();
+
+  return withSessionMeta({
     code: '',
     status: 'lobby',
     hostId,
-    createdAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
     startedAt: null,
+    finishedAt: null,
     players: {
       [hostId]: {
         id: hostId,
         name: hostName.trim(),
-        joinedAt: Date.now(),
+        joinedAt: now,
+        lastSeenAt: now,
+        reconnectCount: 0,
         isHost: true,
       },
     },
     seating: [hostId],
     scores: { A: 0, B: 0 },
     lobbyMessage: 'Waiting for players',
-  };
+  }, {
+    now,
+    lastAction: 'lobby_created',
+    lastActorId: hostId,
+  });
 }
 
 function buildRound(players, dealerIndex, scores, handNumber = 1) {
@@ -197,16 +230,26 @@ function applyDealAnnouncements(round, dealNumber, players) {
 export function startMatchFromLobby(game) {
   const players = game.seating.map((playerId) => game.players[playerId]);
   const round = buildRound(players, 0, { A: 0, B: 0 }, 1);
-  return {
+  const now = Date.now();
+  const nextGame = {
     ...game,
     status: round.status === 'finished' ? 'finished' : 'playing',
-    startedAt: Date.now(),
+    startedAt: now,
+    finishedAt: round.status === 'finished' ? now : null,
     seating: players.map((player) => player.id),
     scores: round.scores,
     round,
     lobbyMessage: 'Game started',
     winner: round.winner || null,
   };
+
+  return withSessionMeta(nextGame, {
+    now,
+    startedAt: now,
+    finishedAt: round.status === 'finished' ? now : null,
+    lastAction: 'game_started',
+    lastActorId: game.hostId,
+  });
 }
 
 function visibleHandForPlayer(round, playerId) {
@@ -272,13 +315,14 @@ function summarizeCard(card) {
   return `${card.rank}${card.suit}`;
 }
 
-function finalizeHand(game) {
+function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };
   const a = round.capturedCardCount.A;
   const b = round.capturedCardCount.B;
   const dealerTeam = round.teamsByPlayer[round.turnOrder[round.dealerIndex]]?.teamId || 'A';
   const nonDealerTeam = dealerTeam === 'A' ? 'B' : 'A';
+  const now = Date.now();
 
   if (a >= 20 || b >= 20) {
     if (a === 20 && b === 20) {
@@ -299,30 +343,42 @@ function finalizeHand(game) {
   round.events.unshift(`Hand ${round.handNumber} scored: Team A +${pointsByCards.A}, Team B +${pointsByCards.B}.`);
 
   if (nextScores.A >= 40 || nextScores.B >= 40) {
-    return {
+    return withSessionMeta({
       ...game,
       status: 'finished',
       scores: nextScores,
+      finishedAt: now,
       winner: nextScores.A >= 40 ? 'A' : 'B',
       round: { ...round, status: 'finished', scores: nextScores },
-    };
+    }, {
+      now,
+      finishedAt: now,
+      lastAction: 'game_finished',
+      lastActorId,
+    });
   }
 
   const players = game.seating.map((playerId) => game.players[playerId]);
   const nextDealerIndex = (round.dealerIndex + 1) % players.length;
   const nextRound = buildRound(players, nextDealerIndex, nextScores, round.handNumber + 1);
 
-  return {
+  return withSessionMeta({
     ...game,
     status: nextRound.status === 'finished' ? 'finished' : 'playing',
     scores: nextRound.scores,
     winner: nextRound.winner || null,
     round: nextRound,
-  };
+  }, {
+    now,
+    finishedAt: nextRound.status === 'finished' ? now : null,
+    lastAction: 'hand_scored',
+    lastActorId,
+  });
 }
 
 export function applyMove(game, playerId, move) {
   if (!game?.round || game.status !== 'playing') throw new Error('Game is not active.');
+  const now = Date.now();
   const round = structuredClone(game.round);
   round.board = Array.isArray(round.board) ? round.board : [];
   round.capturePiles = {
@@ -392,18 +448,34 @@ export function applyMove(game, playerId, move) {
     const players = game.seating.map((id) => game.players[id]);
     applyDealAnnouncements(round, 2, players);
     if (round.status === 'finished') {
-      return { ...game, status: 'finished', scores: round.scores, winner: round.winner, round };
+      return withSessionMeta({ ...game, status: 'finished', scores: round.scores, finishedAt: now, winner: round.winner, round }, {
+        now,
+        finishedAt: now,
+        lastAction: 'deal_started_and_finished',
+        lastActorId: playerId,
+        lastMoveAt: now,
+      });
     }
     round.events.unshift('Deal 2 has started.');
-    return { ...game, scores: round.scores, round };
+    return withSessionMeta({ ...game, scores: round.scores, round }, {
+      now,
+      lastAction: 'deal_started',
+      lastActorId: playerId,
+      lastMoveAt: now,
+    });
   }
 
   if (dealFinished && round.activeDeal === 2) {
-    return finalizeHand({ ...game, scores: round.scores, round });
+    return finalizeHand({ ...game, scores: round.scores, round }, playerId);
   }
 
   round.turnPlayerId = nextTurnPlayer(round);
-  return { ...game, scores: round.scores, round };
+  return withSessionMeta({ ...game, scores: round.scores, round }, {
+    now,
+    lastAction: selected.type === 'trail' ? 'card_trailed' : 'card_captured',
+    lastActorId: playerId,
+    lastMoveAt: now,
+  });
 }
 
 export function teamSummary(game) {

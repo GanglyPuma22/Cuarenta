@@ -6,6 +6,9 @@ Fresh React + Vite rewrite of the old repo.
 - 4-player lobby using Firebase Realtime Database
 - Host creates a 6-character room code
 - Players join by code with just a display name (no auth UI)
+- Every game now gets a shareable rejoin URL (`?game=ABC123`) and the current browser remembers the last active session
+- Existing seated players can reopen the saved URL on the same browser and resume mid-game instead of getting locked out by the lobby-only join flow
+- Drag-first card play: drag onto the table to trail, onto highlighted board cards to match, or onto capture lanes for addition captures
 - Host vets joined names and starts when 4 seats are filled
 - Teams are seat-based: seats 1 & 3 vs seats 2 & 4
 - Actual turn-based Cuarenta game flow with:
@@ -47,7 +50,7 @@ Rules source used: https://www.pagat.com/fishing/cuarenta.html
 ## Firebase notes
 This app expects the Firebase project `cuarenta-dfbf1`.
 
-Because the requested flow is "no auth for now", the current `database.rules.json` is intentionally permissive and should be treated as temporary/dev-only. Before production, tighten rules around game creation and writes.
+Because the requested flow is still "no auth UI for now", the database rules hardening here is structural rather than identity-perfect. The rules now validate room-code shape, required metadata, player counts, name lengths, score bounds, and session metadata so the database is less of a free-for-all, but a determined attacker could still impersonate writes without anonymous/custom auth.
 
 Expected RTDB path:
 - `games/<CODE>`
@@ -69,8 +72,7 @@ firebase deploy --only hosting,database
 If you deploy behind another web server instead of Firebase Hosting, serve the `dist/` folder at the path you built for. For `itsyasha.com/cuarenta`, build with `VITE_BASE_PATH=/cuarenta/` and keep SPA rewrites enabled.
 
 ## Current limitations / follow-up
-- No auth UI. Identity is just a local browser-generated player id plus chosen name.
+- No auth UI. Identity is still a local browser-generated player id plus chosen name, so true seat ownership still wants anonymous/custom auth later.
+- Rejoin is intentionally same-browser and same-local-player-id. It is robust for refresh/disconnect/reopen, not for arbitrary device handoff.
 - Ronda-caida 10-point remembered bonus is not implemented yet.
-- The UI is functional and clean, but not a polished final visual design from Stitch.
-- Database rules are intentionally broad for rapid testing and should be hardened before public launch.
- be hardened before public launch.
+- The UI is much more tactile now, but it is still a pragmatic drag-first web implementation, not full Hearthstone-grade animation/polish.
