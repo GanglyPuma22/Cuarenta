@@ -3,7 +3,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { databaseUrl, db } from './lib/firebase';
 import { getLocalPlayerId, getSavedName, saveName } from './lib/localPlayer';
 import { applyMove, createInitialGameState, generateGameCode, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
-import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
+import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 function moveKey(move) {
   return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
@@ -284,8 +284,15 @@ function ActivityPanel({ round, game, currentPlayerId }) {
 }
 
 export default function App() {
-  const initialUrlCode = getGameCodeFromUrl();
-  const initialSavedSession = getSavedSession();
+  const [{ initialUrlCode, initialSavedSession }] = useState(() => {
+    const urlCode = getGameCodeFromUrl();
+    const savedSession = getSavedSession();
+
+    return {
+      initialUrlCode: urlCode,
+      initialSavedSession: savedSession,
+    };
+  });
 
   const [name, setName] = useState(getSavedName());
   const [joinCode, setJoinCode] = useState(initialUrlCode || '');
@@ -472,7 +479,7 @@ export default function App() {
   async function joinGame() {
     const trimmed = name.trim();
     const code = normalizeGameCode(gameCode || joinCode);
-    if (!trimmed || !code) return setError('Enter your name and a game code.');
+    if (!trimmed || !isValidGameCode(code)) return setError('Enter your name and a valid 6-character game code.');
     if (dbStatus === 'read-denied') return setError('RTDB public reads are currently blocked, so joining cannot work yet. Update the live database rules first.');
     saveName(trimmed);
     setBusy(true);

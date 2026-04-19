@@ -50,7 +50,7 @@ Rules source used: https://www.pagat.com/fishing/cuarenta.html
 ## Firebase notes
 This app expects the Firebase project `cuarenta-dfbf1`.
 
-Because the requested flow is still "no auth UI for now", the database rules hardening here is structural rather than identity-perfect. The rules now validate room-code shape, required metadata, player counts, name lengths, score bounds, and session metadata so the database is less of a free-for-all, but a determined attacker could still impersonate writes without anonymous/custom auth.
+Because the requested flow is still "no auth UI for now", the database rules here are intentionally light. In this PR they validate the room-code shape and ensure the stored `code` field matches the `games/<CODE>` path, but they do not yet enforce player counts, name lengths, score bounds, or session metadata, so a determined attacker could still impersonate writes without anonymous/custom auth.
 
 Expected RTDB path:
 - `games/<CODE>`
