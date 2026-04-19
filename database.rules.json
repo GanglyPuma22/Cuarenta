@@ -4,7 +4,7 @@
       ".read": true,
       "$code": {
         ".write": "newData.exists() && $code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.child('code').val() === $code",
-        ".validate": "newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && newData.child('lastActivityAt').isNumber() && newData.child('players').childrenCount() > 0 && newData.child('players').childrenCount() <= 4 && newData.child('seating').childrenCount() > 0 && newData.child('seating').childrenCount() <= 4 && newData.child('scores').hasChildren(['A', 'B']) && newData.child('players').hasChild(newData.child('hostId').val())",
+        ".validate": "newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && newData.child('lastActivityAt').isNumber() && newData.child('players').hasChild(newData.child('hostId').val()) && newData.child('seating/0').isString() && !newData.child('seating/4').exists() && newData.child('scores').hasChildren(['A', 'B'])",
         "code": {
           ".validate": "newData.isString() && newData.val() === $code"
         },
@@ -41,9 +41,9 @@
           }
         },
         "seating": {
-          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          ".validate": "newData.child('0').isString() && !newData.child('4').exists()",
           "$seat": {
-            ".validate": "newData.isString()"
+            ".validate": "$seat.matches(/^[0-3]$/) && newData.isString()"
           }
         },
         "scores": {
