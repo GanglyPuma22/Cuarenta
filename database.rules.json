@@ -1,12 +1,102 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "games": {
       ".read": true,
       "$code": {
+        ".read": true,
         ".write": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
-        ".validate": "newData.exists() && newData.child('code').isString() && newData.child('code').val() === $code",
+        ".validate": "newData.exists() && newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('code').isString() && newData.child('code').val() === $code && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('hostId').isString() && newData.child('players').childrenCount() > 0 && newData.child('players').childrenCount() <= 4 && newData.child('players').hasChild(newData.child('hostId').val()) && newData.child('seating').childrenCount() > 0 && newData.child('seating').childrenCount() <= 4 && newData.child('scores').hasChildren(['A', 'B'])",
         "code": {
           ".validate": "newData.isString() && newData.val() === $code"
+        },
+        "status": {
+          ".validate": "newData.isString() && (newData.val() === 'lobby' || newData.val() === 'playing' || newData.val() === 'finished')"
+        },
+        "hostId": {
+          ".validate": "newData.isString() && newData.val().matches(/^.{1,80}$/)"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "updatedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "lastActivityAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "startedAt": {
+          ".validate": "!newData.exists() || newData.isNumber()"
+        },
+        "finishedAt": {
+          ".validate": "!newData.exists() || newData.isNumber()"
+        },
+        "lobbyMessage": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^.{0,120}$/))"
+        },
+        "winner": {
+          ".validate": "!newData.exists() || newData.val() === 'A' || newData.val() === 'B'"
+        },
+        "scores": {
+          ".validate": "newData.hasChildren(['A', 'B'])",
+          "A": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 80"
+          },
+          "B": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 80"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "players": {
+          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          "$playerId": {
+            ".validate": "newData.hasChildren(['id', 'name', 'joinedAt', 'lastSeenAt', 'reconnectCount', 'isHost']) && newData.child('id').val() === $playerId && newData.child('name').isString() && newData.child('name').val().matches(/^.{1,24}$/) && newData.child('joinedAt').isNumber() && newData.child('lastSeenAt').isNumber() && newData.child('reconnectCount').isNumber() && newData.child('reconnectCount').val() >= 0 && newData.child('reconnectCount').val() <= 100 && newData.child('isHost').isBoolean() && (!newData.child('rejoinedAt').exists() || newData.child('rejoinedAt').isNumber())",
+            "$other": {
+              ".validate": true
+            }
+          }
+        },
+        "seating": {
+          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          "$other": {
+            ".validate": "newData.isString()"
+          }
+        },
+        "session": {
+          ".validate": "newData.hasChildren(['version', 'reconnectable', 'createdAt', 'updatedAt'])",
+          "version": {
+            ".validate": "newData.isNumber() && newData.val() === 2"
+          },
+          "reconnectable": {
+            ".validate": "newData.isBoolean() && newData.val() === true"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "startedAt": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          },
+          "finishedAt": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastMoveAt": {
+            ".validate": "!newData.exists() || newData.isNumber()"
+          },
+          "lastAction": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^.{1,80}$/))"
+          },
+          "lastActorId": {
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^.{1,80}$/))"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
         "$other": {
           ".validate": true

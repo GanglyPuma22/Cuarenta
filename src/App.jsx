@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { get, onValue, ref, runTransaction } from 'firebase/database';
-import { databaseUrl, db } from './lib/firebase';
+import { db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { getLocalPlayerId, getSavedName, saveName } from './lib/localPlayer';
 import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
@@ -295,53 +295,66 @@ function TurnOrder({ game, currentPlayerId }) {
   const seating = game?.seating?.map((id) => game.players[id]) || [];
   const currentTurn = game?.round?.turnPlayerId;
   const dealerPlayerId = getDealerPlayerId(game?.round, game?.seating);
+  const teams = teamSummary(game);
+  const currentTeamId = game?.round?.teamsByPlayer?.[currentPlayerId]?.teamId;
+  const currentTurnName = currentTurn ? (game?.players?.[currentTurn]?.name || '—') : '—';
 
   return (
-    <aside className="sidebar-panel">
-      <div className="section-kicker">Table order</div>
-      <h2 className="sidebar-title">Who acts next</h2>
-      <div className="timeline">
-        {seating.map((player, index) => (
-          <div key={player.id} className={`timeline-item ${currentTurn === player.id ? 'active' : ''}`}>
-            <div className="timeline-dot" />
-            <div className="timeline-copy">
-              <div className="timeline-kicker">{playerLabel(index, currentPlayerId, player, game.round, game)}</div>
-              <div className="timeline-row">
-                <span className="timeline-name">{player.name}</span>
-                <span className="timeline-score">{scoreForPlayer(game, player.id)}<small>/40</small></span>
+    <aside className="sidebar-column">
+      <section className="sidebar-panel score-sidebar">
+        <div className="section-kicker">Match state</div>
+        <h2 className="sidebar-title">Board-side essentials</h2>
+        <div className="sidebar-scorecards">
+          {teams.map((team) => (
+            <div key={team.teamId} className={`side-team-card ${team.teamId === currentTeamId ? 'current-team' : ''}`}>
+              <div className="side-team-head">
+                <span className="side-team-label">Team {team.teamId}</span>
+                <div className="side-team-score">{team.score}<small>/40</small></div>
               </div>
-              <div className="timeline-flags">
-                {player.id === dealerPlayerId ? <span className="timeline-flag">Dealer</span> : null}
-                {currentTurn === player.id ? <span className="timeline-flag current">On move</span> : null}
+              <div className="side-team-players">{team.players.map((player) => player?.name).filter(Boolean).join(' & ')}</div>
+              <div className="side-team-meta">Captured this hand <strong>{team.captured}</strong></div>
+            </div>
+          ))}
+        </div>
+        <div className="round-brief" aria-label="Round state">
+          <div>
+            <span>Hand</span>
+            <strong>{game?.round?.handNumber ?? '?'}</strong>
+          </div>
+          <div>
+            <span>Deal</span>
+            <strong>{game?.round?.activeDeal ?? '?'}</strong>
+          </div>
+          <div>
+            <span>Turn</span>
+            <strong>{currentTurnName}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="sidebar-panel">
+        <div className="section-kicker">Table order</div>
+        <h2 className="sidebar-title">Who acts next</h2>
+        <div className="timeline">
+          {seating.map((player, index) => (
+            <div key={player.id} className={`timeline-item ${currentTurn === player.id ? 'active' : ''}`}>
+              <div className="timeline-dot" />
+              <div className="timeline-copy">
+                <div className="timeline-kicker">{playerLabel(index, currentPlayerId, player, game.round, game)}</div>
+                <div className="timeline-row">
+                  <span className="timeline-name">{player.name}</span>
+                  <span className="timeline-score">{scoreForPlayer(game, player.id)}<small>/40</small></span>
+                </div>
+                <div className="timeline-flags">
+                  {player.id === dealerPlayerId ? <span className="timeline-flag">Dealer</span> : null}
+                  {currentTurn === player.id ? <span className="timeline-flag current">On move</span> : null}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </section>
     </aside>
-  );
-}
-
-function TeamCard({ team, isCurrentTeam }) {
-  const progress = Math.min(100, Math.round((team.score / 40) * 100));
-
-  return (
-    <div className={`team-stat ${isCurrentTeam ? 'current-team' : ''}`}>
-      <div className="team-stat-head">
-        <div>
-          <div className="team-stat-title">Team {team.teamId}</div>
-          <div className="team-stat-players">{team.players.map((player) => player?.name).join(' & ')}</div>
-        </div>
-        <div className="team-score-stack">
-          <strong>{team.score}</strong>
-          <span>/40</span>
-        </div>
-      </div>
-      <div className="team-progress" aria-hidden="true">
-        <div className="team-progress-fill" style={{ width: `${progress}%` }} />
-      </div>
-      <div className="team-stat-line">Captured this hand <strong>{team.captured}</strong></div>
-    </div>
   );
 }
 
@@ -355,30 +368,28 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   const lastPlayedCard = lastPlayedCardId ? boardCardsById[lastPlayedCardId] : null;
   const currentTurnName = game.players?.[round.turnPlayerId]?.name || 'the table';
 
-  let headline = `Waiting for ${currentTurnName}.`;
-  let body = 'Watch the felt, count what is gone, and stay ready for the swing card.';
+  let headline = `Waiting on ${currentTurnName}.`;
+  let body = 'Read the felt, count what is gone, and hold back the answer card.';
 
   if (isYourTurn) {
-    headline = activeCard ? `Your turn — ${cardText(activeCard)} is live.` : 'Your turn — choose a card.';
+    headline = activeCard ? `Your turn — ${cardText(activeCard)} ready.` : 'Your turn — pick the card.';
     if (captureMoves.length === 0) {
-      body = 'No clean capture is showing. Trail something that keeps your left side uncomfortable.';
+      body = 'No clean take is live. Trail something awkward.';
     } else if (captureMoves.length === 1) {
-      body = 'One clear capture line is available. Drag onto the glowing target or use the lane below.';
+      body = 'One clean line is live. Drag fast or inspect the lane below.';
     } else {
-      body = `${captureMoves.length} different capture lines are live. Preview one, then commit the cleanest hit.`;
+      body = `${captureMoves.length} capture lines are live. Preview, then hit the cleanest one.`;
     }
   }
 
   return (
     <section className={`turn-banner ${isYourTurn ? 'is-live' : 'is-waiting'}`}>
-      <div>
-        <div className="section-kicker">Round control</div>
+      <div className="turn-banner-copy">
+        <div className="section-kicker">On the felt</div>
         <h2>{headline}</h2>
         <p>{body}</p>
       </div>
       <div className="turn-banner-chips">
-        <span className="turn-chip">Hand {round.handNumber}</span>
-        <span className="turn-chip">Deal {round.activeDeal}</span>
         {activeCard ? <span className="turn-chip emphasis">Selected {cardText(activeCard)}</span> : null}
         {lastPlayedCard ? <span className="turn-chip warning">Caída target: {cardText(lastPlayedCard)}</span> : null}
         {liveCaida ? <span className="turn-chip bonus">Caída live</span> : null}
@@ -402,7 +413,6 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
-        <div className="hud-chip subdued">Drag to the felt or a live target</div>
       </div>
 
       <div
@@ -632,7 +642,7 @@ function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, acti
   );
 }
 
-function ActivityPanel({ round, game, currentPlayerId }) {
+function ActivityPanel({ round, game, currentPlayerId, onCopyShareLink, linkCopied }) {
   const me = game?.players?.[currentPlayerId];
   const teamId = round?.teamsByPlayer?.[currentPlayerId]?.teamId;
   const seat = round?.teamsByPlayer?.[currentPlayerId]?.seat;
@@ -642,6 +652,16 @@ function ActivityPanel({ round, game, currentPlayerId }) {
 
   return (
     <aside className="activity-column">
+      <div className="activity-card utility-card">
+        <div className="section-kicker">Reconnect</div>
+        <div className="activity-title">Keep the table link close</div>
+        <p className="utility-copy">Same browser + same link reconnects cleanly. Device handoff still is not part of this build.</p>
+        <div className="utility-row">
+          <span className="profile-tag">Game {game?.code}</span>
+          <button type="button" className="secondary-button utility-button" onClick={onCopyShareLink}>{linkCopied ? 'Link copied' : 'Copy rejoin link'}</button>
+        </div>
+      </div>
+
       <div className="profile-card">
         <div className="profile-avatar">{(me?.name || '?').slice(0, 1).toUpperCase()}</div>
         <div className="profile-name">{me?.name || 'Player'}</div>
@@ -655,6 +675,7 @@ function ActivityPanel({ round, game, currentPlayerId }) {
           <span className="profile-tag">Goal: first to 40</span>
         </div>
       </div>
+
       <div className="activity-card">
         <div className="activity-title">Recent table calls</div>
         <ul>
@@ -681,10 +702,9 @@ export default function App() {
   const [gameCode, setGameCode] = useState(initialUrlCode || initialSavedSession?.gameCode || '');
   const [savedSession, setSavedSession] = useState(initialSavedSession);
   const [game, setGame] = useState(null);
-  const [gameLoadState, setGameLoadState] = useState(gameCode ? 'loading' : 'idle');
+  const [gameLoadState, setGameLoadState] = useState(gameCode && hasFirebase ? 'loading' : 'idle');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [dbStatus, setDbStatus] = useState('checking');
   const [linkCopied, setLinkCopied] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState('');
   const [dragCardId, setDragCardId] = useState('');
@@ -692,7 +712,7 @@ export default function App() {
   const [referenceTab, setReferenceTab] = useState('');
 
   const playerId = useMemo(() => getLocalPlayerId(), []);
-  const gameRef = useMemo(() => (gameCode ? ref(db, `games/${gameCode}`) : null), [gameCode]);
+  const gameRef = useMemo(() => (gameCode && hasFirebase ? ref(db, `games/${gameCode}`) : null), [gameCode]);
 
   function rememberSession(code) {
     saveGameSession(code);
@@ -739,22 +759,6 @@ export default function App() {
   }, [gameCode]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function checkDbAccess() {
-      try {
-        const response = await fetch(`${databaseUrl}/games.json?shallow=true`);
-        if (!cancelled) setDbStatus(response.ok ? 'ok' : response.status === 401 ? 'read-denied' : 'error');
-      } catch {
-        if (!cancelled) setDbStatus('error');
-      }
-    }
-    checkDbAccess();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!gameRef) {
       setGame(null);
       setGameLoadState('idle');
@@ -791,7 +795,6 @@ export default function App() {
 
   const seating = game?.seating?.map((id) => game.players[id]);
   const isParticipant = Boolean(game?.players?.[playerId]);
-  const teams = teamSummary(game);
   const round = game?.round;
   const boardCards = Array.isArray(round?.board) ? round.board : [];
   const boardCardsById = useMemo(
@@ -860,7 +863,7 @@ export default function App() {
   async function createGame() {
     const trimmed = name.trim();
     if (!trimmed) return setError('Enter your name first.');
-    if (dbStatus === 'read-denied') return setError('RTDB public reads are currently blocked, so lobby creation cannot work yet. Update the live database rules first.');
+    if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
     saveName(trimmed);
     setBusy(true);
     setError('');
@@ -893,7 +896,7 @@ export default function App() {
     const trimmed = name.trim();
     const code = normalizeGameCode(gameCode || joinCode);
     if (!trimmed || !isValidGameCode(code)) return setError('Enter your name and a valid 6-character game code.');
-    if (dbStatus === 'read-denied') return setError('RTDB public reads are currently blocked, so joining cannot work yet. Update the live database rules first.');
+    if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
     saveName(trimmed);
     setBusy(true);
     setError('');
@@ -960,6 +963,7 @@ export default function App() {
   }
 
   async function startGame() {
+    if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
     if (!game || game.hostId !== playerId) return;
     if ((game.seating || []).length !== 4) return setError('Need exactly 4 players.');
     setBusy(true);
@@ -974,6 +978,7 @@ export default function App() {
   }
 
   async function playChosenMove(move) {
+    if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
     if (!move) return;
     setDragCardId('');
     setPreviewMoveKey('');
@@ -986,8 +991,9 @@ export default function App() {
     setBusy(false);
   }
 
-  const showHome = !gameCode || gameLoadState === 'missing';
-  const showGameChrome = Boolean(gameCode) && gameLoadState !== 'missing';
+  const firebaseUnavailable = firebaseMode === 'unconfigured';
+  const showHome = !gameCode || gameLoadState === 'missing' || firebaseUnavailable;
+  const showGameChrome = Boolean(gameCode) && gameLoadState !== 'missing' && !firebaseUnavailable;
   const shareUrl = showGameChrome ? buildGameUrl(gameCode) : '';
 
   return (
@@ -1043,11 +1049,11 @@ export default function App() {
               <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} placeholder="Mateo V." />
             </label>
             <div className="button-stack">
-              <button className="primary-button" disabled={busy || dbStatus === 'checking'} onClick={createGame}>Host game</button>
+              <button className="primary-button" disabled={busy || !hasFirebase} onClick={createGame}>Host game</button>
             </div>
             <div className="join-inline">
               <input value={joinCode} onChange={(event) => setJoinCode(normalizeGameCode(event.target.value))} placeholder="Enter code" maxLength={6} />
-              <button className="secondary-button" disabled={busy || dbStatus === 'checking'} onClick={joinGame}>Join</button>
+              <button className="secondary-button" disabled={busy || !hasFirebase} onClick={joinGame}>Join</button>
             </div>
             <div className="ghost-note">This browser remembers the current seat, so a refresh does not quietly murder the match.</div>
           </section>
@@ -1066,9 +1072,9 @@ export default function App() {
         </section>
       ) : null}
 
-      {dbStatus === 'read-denied' ? (
+      {firebaseUnavailable ? (
         <section className="notice-card">
-          The live Firebase Realtime Database still rejects public reads for the game path. With the current no-auth design, host and join will not work until those live rules are deployed.
+          {firebaseConfigError}
         </section>
       ) : null}
 
@@ -1093,7 +1099,7 @@ export default function App() {
                 Your name
                 <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} placeholder="Mateo V." />
               </label>
-              <button className="primary-button" disabled={busy || dbStatus === 'checking'} onClick={joinGame}>Take a seat</button>
+              <button className="primary-button" disabled={busy || !hasFirebase} onClick={joinGame}>Take a seat</button>
               <div className="ghost-note">Open this same link later on this browser and you will land back in the game instead of getting bounced to the lobby.</div>
             </section>
           ) : (
@@ -1106,69 +1112,62 @@ export default function App() {
       ) : null}
 
       {game && round && isParticipant ? (
-        <>
-          <section className="notice-card slim-note">
-            Refresh-safe session is active for <strong>{game.code}</strong>. Reopen the same link on this browser to reconnect mid-match.
+        <section className="game-layout">
+          <TurnOrder game={game} currentPlayerId={playerId} />
+          <section className="center-column">
+            <TurnBanner
+              game={game}
+              round={round}
+              currentPlayerId={playerId}
+              activeCard={activeCard}
+              movesForActiveCard={movesForActiveCard}
+              moveOutcomes={moveOutcomes}
+              lastPlayedCardId={lastPlayedCardId}
+              boardCardsById={boardCardsById}
+            />
+            <Board
+              cards={round.board}
+              deckRemaining={round.deckRemaining}
+              canLimpia={canLimpia}
+              highlightedCaptureIds={highlightedCaptureIds}
+              highlightedTargetIds={highlightedTargetIds}
+              captureOrderMap={captureOrderMap}
+              directDropMoves={directDropMoves}
+              previewTargetMeta={previewTargetMeta}
+              trailMove={trailMove}
+              dragCardId={dragCardId}
+              onPlay={playChosenMove}
+              onPreview={setPreviewMoveKey}
+              lastPlayedCardId={lastPlayedCardId}
+              previewedMove={previewedMove}
+              previewOutcome={previewOutcome}
+              previewCopy={previewCopy}
+              boardCardsById={boardCardsById}
+            />
+            <MovePicker
+              hand={visibleHand}
+              legalMoves={legalMoves}
+              boardCardsById={boardCardsById}
+              onPlay={playChosenMove}
+              isYourTurn={isYourTurn}
+              activeCardId={activeCardId}
+              setSelectedCardId={setSelectedCardId}
+              dragCardId={dragCardId}
+              setDragCardId={setDragCardId}
+              previewMoveKey={previewMoveKey}
+              setPreviewMoveKey={setPreviewMoveKey}
+              moveOutcomes={moveOutcomes}
+            />
+            {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
           </section>
-          <section className="game-layout">
-            <TurnOrder game={game} currentPlayerId={playerId} />
-            <section className="center-column">
-              <div className="team-stats-row">
-                {teams.map((team) => <TeamCard key={team.teamId} team={team} isCurrentTeam={team.teamId === currentTeamId} />)}
-                <div className="phase-card">
-                  <div className="team-stat-title">Round state</div>
-                  <div className="phase-name">Hand {round.handNumber} · Deal {round.activeDeal}</div>
-                  <div className="phase-turn">Turn: {game.players[round.turnPlayerId]?.name}</div>
-                </div>
-              </div>
-              <TurnBanner
-                game={game}
-                round={round}
-                currentPlayerId={playerId}
-                activeCard={activeCard}
-                movesForActiveCard={movesForActiveCard}
-                moveOutcomes={moveOutcomes}
-                lastPlayedCardId={lastPlayedCardId}
-                boardCardsById={boardCardsById}
-              />
-              <Board
-                cards={round.board}
-                deckRemaining={round.deckRemaining}
-                canLimpia={canLimpia}
-                highlightedCaptureIds={highlightedCaptureIds}
-                highlightedTargetIds={highlightedTargetIds}
-                captureOrderMap={captureOrderMap}
-                directDropMoves={directDropMoves}
-                previewTargetMeta={previewTargetMeta}
-                trailMove={trailMove}
-                dragCardId={dragCardId}
-                onPlay={playChosenMove}
-                onPreview={setPreviewMoveKey}
-                lastPlayedCardId={lastPlayedCardId}
-                previewedMove={previewedMove}
-                previewOutcome={previewOutcome}
-                previewCopy={previewCopy}
-                boardCardsById={boardCardsById}
-              />
-              <MovePicker
-                hand={visibleHand}
-                legalMoves={legalMoves}
-                boardCardsById={boardCardsById}
-                onPlay={playChosenMove}
-                isYourTurn={isYourTurn}
-                activeCardId={activeCardId}
-                setSelectedCardId={setSelectedCardId}
-                dragCardId={dragCardId}
-                setDragCardId={setDragCardId}
-                previewMoveKey={previewMoveKey}
-                setPreviewMoveKey={setPreviewMoveKey}
-                moveOutcomes={moveOutcomes}
-              />
-              {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
-            </section>
-            <ActivityPanel round={round} game={game} currentPlayerId={playerId} />
-          </section>
-        </>
+          <ActivityPanel
+            round={round}
+            game={game}
+            currentPlayerId={playerId}
+            onCopyShareLink={copyShareLink}
+            linkCopied={linkCopied}
+          />
+        </section>
       ) : null}
 
       {game && round && !isParticipant ? (
