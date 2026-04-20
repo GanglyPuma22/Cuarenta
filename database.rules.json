@@ -7,7 +7,7 @@
       "$code": {
         ".read": true,
         ".write": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
-        ".validate": "newData.exists() && newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('code').isString() && newData.child('code').val() === $code && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('hostId').isString() && newData.child('players').childrenCount() > 0 && newData.child('players').childrenCount() <= 4 && newData.child('players').hasChild(newData.child('hostId').val()) && newData.child('seating').childrenCount() > 0 && newData.child('seating').childrenCount() <= 4 && newData.child('scores').hasChildren(['A', 'B'])",
+        ".validate": "newData.exists() && newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('code').isString() && newData.child('code').val() === $code && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('hostId').isString() && newData.child('players').hasChild(newData.child('hostId').val()) && newData.child('seating/0').isString() && !newData.child('seating/4').exists() && newData.child('scores').hasChildren(['A', 'B'])",
         "code": {
           ".validate": "newData.isString() && newData.val() === $code"
         },
@@ -51,7 +51,7 @@
           }
         },
         "players": {
-          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          ".validate": "newData.hasChildren([newData.parent().child('hostId').val()])",
           "$playerId": {
             ".validate": "newData.hasChildren(['id', 'name', 'joinedAt', 'lastSeenAt', 'reconnectCount', 'isHost']) && newData.child('id').val() === $playerId && newData.child('name').isString() && newData.child('name').val().matches(/^.{1,24}$/) && newData.child('joinedAt').isNumber() && newData.child('lastSeenAt').isNumber() && newData.child('reconnectCount').isNumber() && newData.child('reconnectCount').val() >= 0 && newData.child('reconnectCount').val() <= 100 && newData.child('isHost').isBoolean() && (!newData.child('rejoinedAt').exists() || newData.child('rejoinedAt').isNumber())",
             "$other": {
@@ -60,7 +60,7 @@
           }
         },
         "seating": {
-          ".validate": "newData.childrenCount() > 0 && newData.childrenCount() <= 4",
+          ".validate": "newData.child('0').isString() && !newData.child('4').exists()",
           "$other": {
             ".validate": "newData.isString()"
           }
