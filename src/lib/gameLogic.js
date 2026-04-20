@@ -229,7 +229,8 @@ function applyDealAnnouncements(round, dealNumber, players) {
 
 export function startMatchFromLobby(game) {
   const players = game.seating.map((playerId) => game.players[playerId]);
-  const round = buildRound(players, 0, { A: 0, B: 0 }, 1);
+  const dealerIndex = Math.floor(Math.random() * players.length);
+  const round = buildRound(players, dealerIndex, { A: 0, B: 0 }, 1);
   const now = Date.now();
   const nextGame = {
     ...game,
