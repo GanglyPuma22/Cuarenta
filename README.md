@@ -9,7 +9,7 @@ Fresh React + Vite rewrite of the old repo.
 - Every game now gets a shareable rejoin URL (`?game=ABC123`) and the current browser remembers the last active session
 - Existing seated players can reopen the saved URL on the same browser and resume mid-game instead of getting locked out by the lobby-only join flow
 - Drag-first card play: drag onto the table to trail, onto highlighted board cards to match, or onto capture lanes / live targets for addition captures
-- Stronger move previews: the table now shows capture order, caída targets, scoring swing badges, and clearer turn-state feedback before you commit
+- Stronger move previews: hoverable board targets now carry distinct match/addition semantics, the table groups exact target vs sequence cards, and the UI shows capture order, caída targets, and scoring swing badges before you commit
 - In-app rules + scoring reference drawer for the high-value Cuarenta edge cases
 - Host vets joined names and starts when 4 seats are filled
 - Opening dealer is chosen randomly among the seated players for a fairer start

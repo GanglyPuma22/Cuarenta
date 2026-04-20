@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { databaseUrl, db } from './lib/firebase';
 import { getLocalPlayerId, getSavedName, saveName } from './lib/localPlayer';
-import { applyMove, createInitialGameState, generateGameCode, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const REFERENCE_PANELS = {
@@ -87,38 +87,60 @@ function buildDirectDropMoves(moves) {
   );
 }
 
-function getMoveOutcome(round, game, playerId, move) {
-  if (!round || !game || !move) {
-    return {
-      captureCount: 0,
-      sequenceCount: 0,
-      isCaida: false,
-      isLimpia: false,
-      bonusPoints: 0,
-    };
+function buildPreviewTargetMeta(moves) {
+  const firstMoveByTarget = new Map();
+  const countsByTarget = new Map();
+
+  for (const move of moves) {
+    for (const targetId of move.targetIds || []) {
+      countsByTarget.set(targetId, (countsByTarget.get(targetId) || 0) + 1);
+      if (!firstMoveByTarget.has(targetId)) firstMoveByTarget.set(targetId, move);
+    }
   }
 
-  const captureSet = new Set(move.captureIds || []);
-  const targetCount = (move.targetIds || []).length;
-  const sequenceCount = Math.max(0, captureSet.size - targetCount);
-  const teamId = round.teamsByPlayer?.[playerId]?.teamId;
-  const scoreBefore = game.scores?.[teamId] || 0;
-  const remainingBoardCards = (round.board || []).filter((card) => !captureSet.has(card.id)).length;
-  const isCaida = move.type === 'match'
-    && Boolean(round.lastPlayedCard)
-    && move.targetIds?.[0] === round.lastPlayedCard.cardId
-    && round.lastPlayedCard.dealNumber === round.activeDeal
-    && round.lastPlayedCard.turnNumber === round.playsInCurrentDeal;
-  const isLimpia = move.type !== 'trail' && remainingBoardCards === 0 && scoreBefore < 38;
-  const bonusPoints = (isCaida ? 2 : 0) + (isLimpia ? 2 : 0);
+  return Object.fromEntries(
+    [...firstMoveByTarget.entries()].map(([targetId, move]) => [targetId, {
+      move,
+      previewKey: moveKey(move),
+      candidateCount: countsByTarget.get(targetId) || 1,
+    }])
+  );
+}
 
-  return {
-    captureCount: captureSet.size,
-    sequenceCount,
-    isCaida,
-    isLimpia,
-    bonusPoints,
-  };
+function moveTone(move) {
+  if (!move) return 'idle';
+  if (move.type === 'trail') return 'trail';
+  return move.type === 'match' ? 'match' : 'addition';
+}
+
+function moveKindLabel(move) {
+  if (!move) return 'Preview';
+  if (move.type === 'trail') return 'Trail';
+  return move.type === 'match' ? 'Match' : 'Addition';
+}
+
+function describePreviewGroups(move, boardCardsById) {
+  if (!move || move.type === 'trail') return [];
+  const targets = (move.targetIds || []).map((id) => boardCardsById[id]).filter(Boolean);
+  const targetIds = new Set(move.targetIds || []);
+  const extras = (move.captureIds || []).filter((id) => !targetIds.has(id)).map((id) => boardCardsById[id]).filter(Boolean);
+  const groups = [];
+
+  if (targets.length) {
+    groups.push({
+      label: move.type === 'match' ? 'Match target' : 'Add set',
+      cards: targets.map(cardText).join(' · '),
+    });
+  }
+
+  if (extras.length) {
+    groups.push({
+      label: 'Sequence run',
+      cards: extras.map(cardText).join(' · '),
+    });
+  }
+
+  return groups;
 }
 
 function describeMove(move, boardCardsById, outcome) {
@@ -163,38 +185,93 @@ function GameCode({ code }) {
   return <div className="share-pill">Game <strong>{code}</strong></div>;
 }
 
-function ReferenceDrawer({ tab, onClose }) {
+function ReferenceDrawer({ tab, onRequestClose, onTabChange }) {
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!tab) return undefined;
+
+    const previousFocus = document.activeElement;
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onRequestClose();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusables = [...dialogRef.current.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+        .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+      if (!focusables.length) return;
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [onRequestClose, tab]);
+
   if (!tab) return null;
   const panel = REFERENCE_PANELS[tab] || REFERENCE_PANELS.rules;
+  const titleId = `reference-title-${tab}`;
+  const descriptionId = `reference-description-${tab}`;
 
   return (
-    <div className="reference-overlay" onClick={() => onClose('')} role="presentation">
-      <section className="reference-drawer" onClick={(event) => event.stopPropagation()}>
+    <div className="reference-overlay" onClick={onRequestClose} role="presentation">
+      <section
+        ref={dialogRef}
+        className="reference-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="reference-head">
           <div>
             <div className="eyebrow">{panel.eyebrow}</div>
-            <h2>{panel.title}</h2>
+            <h2 id={titleId}>{panel.title}</h2>
           </div>
-          <button type="button" className="text-button" onClick={() => onClose('')}>Close</button>
+          <button ref={closeButtonRef} type="button" className="text-button" onClick={onRequestClose}>Close</button>
         </div>
-        <div className="reference-tabs">
+        <div className="reference-tabs" role="tablist" aria-label="Reference panels">
           {Object.entries(REFERENCE_PANELS).map(([key, value]) => (
             <button
               key={key}
+              id={`reference-tab-${key}`}
               type="button"
+              role="tab"
+              aria-selected={tab === key}
+              aria-controls={`reference-panel-${key}`}
               className={`reference-tab ${tab === key ? 'active' : ''}`}
-              onClick={() => onClose(key)}
+              onClick={() => onTabChange(key)}
             >
               {value.eyebrow}
             </button>
           ))}
         </div>
-        <p className="reference-lead">{panel.lead}</p>
-        <ul className="reference-list">
-          {panel.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
-        </ul>
-        <div className="reference-footer">
-          Source of truth: Pagat’s Cuarenta rules page. This UI also assumes full sequence capture whenever the sequence is visible.
+        <div id={`reference-panel-${tab}`} role="tabpanel" aria-labelledby={`reference-tab-${tab}`}>
+          <p id={descriptionId} className="reference-lead">{panel.lead}</p>
+          <ul className="reference-list">
+            {panel.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
+          </ul>
+          <div className="reference-footer">
+            Source of truth: Pagat’s Cuarenta rules page. This UI also assumes full sequence capture whenever the sequence is visible.
+          </div>
         </div>
       </section>
     </div>
@@ -217,7 +294,7 @@ function LobbySeat({ player, isCurrent, slot }) {
 function TurnOrder({ game, currentPlayerId }) {
   const seating = game?.seating?.map((id) => game.players[id]) || [];
   const currentTurn = game?.round?.turnPlayerId;
-  const dealerIndex = game?.round?.dealerIndex ?? -1;
+  const dealerPlayerId = getDealerPlayerId(game?.round, game?.seating);
 
   return (
     <aside className="sidebar-panel">
@@ -234,7 +311,7 @@ function TurnOrder({ game, currentPlayerId }) {
                 <span className="timeline-score">{scoreForPlayer(game, player.id)}<small>/40</small></span>
               </div>
               <div className="timeline-flags">
-                {index === dealerIndex ? <span className="timeline-flag">Dealer</span> : null}
+                {player.id === dealerPlayerId ? <span className="timeline-flag">Dealer</span> : null}
                 {currentTurn === player.id ? <span className="timeline-flag current">On move</span> : null}
               </div>
             </div>
@@ -311,14 +388,17 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, trailMove, dragCardId, onPlay, lastPlayedCardId, previewedMove, previewCopy }) {
+function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, boardCardsById }) {
   const safeCards = Array.isArray(cards) ? cards : [];
   const highlighted = new Set(highlightedCaptureIds || []);
   const targets = new Set(highlightedTargetIds || []);
   const trailArmed = Boolean(trailMove) && dragCardId === trailMove.playedCardId;
+  const previewToneClass = moveTone(previewedMove);
+  const previewGroups = describePreviewGroups(previewedMove, boardCardsById);
+  const sequenceIds = new Set((previewedMove?.captureIds || []).filter((id) => !targets.has(id)));
 
   return (
-    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''}`}>
+    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass}`}>
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
@@ -327,10 +407,13 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
 
       <div
         className={`table-grid ${trailArmed ? 'is-drop-target' : ''}`}
+        onMouseEnter={() => trailArmed && trailMove && onPreview(moveKey(trailMove))}
+        onMouseLeave={() => onPreview('')}
         onDragOver={(event) => {
           if (!trailArmed) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
+          if (trailMove) onPreview(moveKey(trailMove));
         }}
         onDrop={(event) => {
           if (!trailArmed || !trailMove) return;
@@ -341,25 +424,41 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
         {safeCards.length ? safeCards.map((card, index) => {
           const directMove = directDropMoves?.[card.id];
           const canDirectDrop = Boolean(directMove) && dragCardId === directMove.playedCardId;
+          const previewMeta = previewTargetMeta?.[card.id];
           const captureStep = captureOrderMap?.[card.id];
           const isLastPlayed = lastPlayedCardId === card.id;
+          const isSequenceCard = sequenceIds.has(card.id);
+          const toneClass = previewMeta ? `tone-${moveTone(previewMeta.move)}` : '';
+          const targetLabel = previewMeta
+            ? (previewMeta.candidateCount > 1 ? `${previewMeta.candidateCount} lines` : moveKindLabel(previewMeta.move))
+            : '';
+          const CardTag = directMove ? 'button' : 'div';
 
           return (
-            <div
+            <CardTag
               key={card.id}
+              type={directMove ? 'button' : undefined}
               className={[
                 'stitch-card',
                 'board-card',
                 cardSuitClass(card),
                 highlighted.has(card.id) ? 'is-highlighted' : '',
                 targets.has(card.id) ? 'is-target-card' : '',
+                isSequenceCard ? 'is-sequence-card' : '',
+                previewMeta ? 'has-preview-target' : '',
+                toneClass,
                 directMove ? 'is-click-target' : '',
                 canDirectDrop ? 'is-direct-target' : '',
                 isLastPlayed ? 'is-last-played' : '',
               ].filter(Boolean).join(' ')}
               style={{ '--card-tilt': boardCardTilt(index) }}
               onClick={() => directMove && onPlay(directMove)}
+              onMouseEnter={() => previewMeta && onPreview(previewMeta.previewKey)}
+              onMouseLeave={() => previewMeta && onPreview('')}
+              onFocus={() => previewMeta && onPreview(previewMeta.previewKey)}
+              onBlur={() => previewMeta && onPreview('')}
               onDragOver={(event) => {
+                if (previewMeta) onPreview(previewMeta.previewKey);
                 if (!canDirectDrop) return;
                 event.preventDefault();
                 event.dataTransfer.dropEffect = 'move';
@@ -371,20 +470,42 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
                 onPlay(directMove);
               }}
             >
+              {previewMeta ? <div className={`card-target-tag ${toneClass}`}>{targetLabel}</div> : null}
               {isLastPlayed ? <div className="card-status-tag">Last card</div> : null}
               {captureStep ? <div className="capture-step-tag">{captureStep}</div> : null}
               <div className="card-corner">{card.rank}</div>
               <div className="card-center">{card.suit}</div>
               <div className="card-corner bottom">{card.rank}</div>
-            </div>
+            </CardTag>
           );
         }) : <div className="empty-table">No cards on the felt yet.</div>}
       </div>
 
       {previewedMove ? (
-        <div className={`board-preview ${previewedMove.type === 'trail' ? 'trail' : 'capture'}`}>
-          <div className="board-preview-kicker">{previewedMove.type === 'trail' ? 'Trail preview' : 'Capture preview'}</div>
-          <div className="board-preview-copy">{previewCopy}</div>
+        <div className={`board-preview ${previewToneClass}`}>
+          <div className="board-preview-head">
+            <div>
+              <div className="board-preview-kicker">{moveKindLabel(previewedMove)} preview</div>
+              <div className="board-preview-copy">{previewCopy}</div>
+            </div>
+            <div className="board-preview-badges">
+              <span className={`preview-pill tone-${previewToneClass}`}>{moveKindLabel(previewedMove)}</span>
+              {previewOutcome?.sequenceCount > 0 ? <span className="preview-pill">Run +{previewOutcome.sequenceCount}</span> : null}
+              {previewOutcome?.isCaida ? <span className="preview-pill bonus">Caída +2</span> : null}
+              {previewOutcome?.isLimpia ? <span className="preview-pill bonus">Limpia +2</span> : null}
+              {previewedMove.type === 'trail' ? <span className="preview-pill subtle">No capture</span> : null}
+            </div>
+          </div>
+          {previewGroups.length ? (
+            <div className="board-preview-groups">
+              {previewGroups.map((group) => (
+                <div key={`${group.label}-${group.cards}`} className="preview-group-row">
+                  <span className="preview-group-label">{group.label}</span>
+                  <span className="preview-group-cards">{group.cards}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -394,7 +515,8 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
 function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPreviewed, dragCardId, onPreview, onPlay }) {
   const captureCards = (move.captureIds || []).map((id) => boardCardsById[id]).filter(Boolean);
   const canDrop = dragCardId === move.playedCardId;
-  const kindLabel = move.type === 'trail' ? 'Trail' : move.type === 'match' ? 'Match' : 'Addition';
+  const kindLabel = moveKindLabel(move);
+  const toneClass = moveTone(move);
   const chips = [];
 
   if (move.type !== 'trail') chips.push(`${moveOutcome.captureCount} table card${moveOutcome.captureCount === 1 ? '' : 's'}`);
@@ -406,7 +528,7 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
   return (
     <button
       type="button"
-      className={`move-option ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
+      className={`move-option tone-${toneClass} ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
       onClick={() => onPlay(move)}
       onMouseEnter={() => onPreview(moveKey(move))}
       onMouseLeave={() => onPreview('')}
@@ -424,7 +546,7 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
       }}
     >
       <div className="move-option-head">
-        <span className="move-kind">{kindLabel}</span>
+        <span className={`move-kind tone-${toneClass}`}>{kindLabel}</span>
         <span className="move-kicker">{moveOutcome.bonusPoints ? `+${moveOutcome.bonusPoints} swing` : canDrop ? 'Drop to play' : 'Click to play'}</span>
       </div>
       {move.type === 'trail' ? (
@@ -439,7 +561,7 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
         </div>
       )}
       <div className="move-badges">
-        {chips.map((chip) => <span key={chip} className="move-badge">{chip}</span>)}
+        {chips.map((chip) => <span key={chip} className={`move-badge tone-${toneClass}`}>{chip}</span>)}
       </div>
       <div className="move-label">{describeMove(move, boardCardsById, moveOutcome)}</div>
     </button>
@@ -515,7 +637,8 @@ function ActivityPanel({ round, game, currentPlayerId }) {
   const teamId = round?.teamsByPlayer?.[currentPlayerId]?.teamId;
   const seat = round?.teamsByPlayer?.[currentPlayerId]?.seat;
   const recent = (round?.events || []).slice(0, 5);
-  const dealerName = game?.players?.[round?.turnOrder?.[round?.dealerIndex]]?.name;
+  const dealerPlayerId = getDealerPlayerId(round, game?.seating);
+  const dealerName = dealerPlayerId ? game?.players?.[dealerPlayerId]?.name : '';
 
   return (
     <aside className="activity-column">
@@ -678,8 +801,8 @@ export default function App() {
   const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
   const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
   const moveOutcomes = useMemo(
-    () => Object.fromEntries(legalMoves.map((move) => [moveKey(move), getMoveOutcome(round, game, playerId, move)])),
-    [game, legalMoves, playerId, round]
+    () => Object.fromEntries(legalMoves.map((move) => [moveKey(move), analyzeMove(game, playerId, move)])),
+    [game, legalMoves, playerId]
   );
   const isHost = game?.hostId === playerId;
   const isYourTurn = round?.turnPlayerId === playerId;
@@ -689,12 +812,19 @@ export default function App() {
   const activeCard = visibleHand.find((card) => card.id === activeCardId) || visibleHand[0] || null;
   const movesForActiveCard = legalMoves.filter((move) => move.playedCardId === activeCard?.id);
   const captureMovesForActiveCard = movesForActiveCard.filter((move) => move.type !== 'trail');
-  const previewedMove = movesForActiveCard.find((move) => moveKey(move) === previewMoveKey) || null;
+  const previewedMove = movesForActiveCard.find((move) => moveKey(move) === previewMoveKey)
+    || captureMovesForActiveCard[0]
+    || movesForActiveCard[0]
+    || null;
   const trailMove = movesForActiveCard.find((move) => move.type === 'trail') || null;
   const previewOutcome = previewedMove ? moveOutcomes[moveKey(previewedMove)] : null;
   const previewCopy = previewedMove ? describeMove(previewedMove, boardCardsById, previewOutcome || {}) : '';
   const directDropMoves = useMemo(
     () => buildDirectDropMoves(captureMovesForActiveCard),
+    [captureMovesForActiveCard]
+  );
+  const previewTargetMeta = useMemo(
+    () => buildPreviewTargetMeta(captureMovesForActiveCard),
     [captureMovesForActiveCard]
   );
   const highlightedCaptureIds = previewedMove?.captureIds || [];
@@ -866,8 +996,24 @@ export default function App() {
         <div className="brand-block">
           <div className="brand">Cuarenta</div>
           <nav className="topnav">
-            <button type="button" className={referenceTab === 'rules' ? 'active' : ''} onClick={() => setReferenceTab(referenceTab === 'rules' ? '' : 'rules')}>Rules</button>
-            <button type="button" className={referenceTab === 'scoring' ? 'active' : ''} onClick={() => setReferenceTab(referenceTab === 'scoring' ? '' : 'scoring')}>Scoring</button>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={referenceTab === 'rules'}
+              className={referenceTab === 'rules' ? 'active' : ''}
+              onClick={() => setReferenceTab(referenceTab === 'rules' ? '' : 'rules')}
+            >
+              Rules
+            </button>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={referenceTab === 'scoring'}
+              className={referenceTab === 'scoring' ? 'active' : ''}
+              onClick={() => setReferenceTab(referenceTab === 'scoring' ? '' : 'scoring')}
+            >
+              Scoring
+            </button>
           </nav>
         </div>
         <div className="topbar-actions">
@@ -877,7 +1023,7 @@ export default function App() {
         </div>
       </header>
 
-      <ReferenceDrawer tab={referenceTab} onClose={(nextTab = '') => setReferenceTab(nextTab)} />
+      <ReferenceDrawer tab={referenceTab} onRequestClose={() => setReferenceTab('')} onTabChange={setReferenceTab} />
 
       {showHome ? (
         <section className="lobby-shell invite-mode">
@@ -993,12 +1139,16 @@ export default function App() {
                 highlightedTargetIds={highlightedTargetIds}
                 captureOrderMap={captureOrderMap}
                 directDropMoves={directDropMoves}
+                previewTargetMeta={previewTargetMeta}
                 trailMove={trailMove}
                 dragCardId={dragCardId}
                 onPlay={playChosenMove}
+                onPreview={setPreviewMoveKey}
                 lastPlayedCardId={lastPlayedCardId}
                 previewedMove={previewedMove}
+                previewOutcome={previewOutcome}
                 previewCopy={previewCopy}
+                boardCardsById={boardCardsById}
               />
               <MovePicker
                 hand={visibleHand}

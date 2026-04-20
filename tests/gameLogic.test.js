@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { applyMove, getLegalMoves, rankValue, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, rankValue, startMatchFromLobby } from '../src/lib/gameLogic.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -97,6 +97,22 @@ test('getLegalMoves exposes separate match and addition choices and includes ful
   assert.deepEqual(addMove.captureIds, ['b2', 'b3', 'b6', 'b7']);
 });
 
+
+test('same-rank single-card addition is suppressed so hover targets stay unambiguous', () => {
+  const five = card('5', '♠', 'h5');
+  const board = [
+    card('4', '♣', 'b4'),
+    card('5', '♥', 'b5'),
+    card('6', '♦', 'b6'),
+  ];
+  const game = buildGame({ board, hostHand: [five] });
+
+  const moves = getLegalMoves(game.round, 'p1');
+
+  assert.equal(moves.filter((move) => move.type === 'match').length, 1);
+  assert.equal(moves.filter((move) => move.type === 'add').length, 0);
+});
+
 test('matching the immediately previous card counts as caída and can stack with limpia', () => {
   const five = card('5', '♠', 'h5');
   const boardCard = card('5', '♥', 'b5');
@@ -182,9 +198,38 @@ test('opening dealer is randomized among seated players', () => {
   };
 
   for (let index = 0; index < 40; index += 1) {
-    seen.add(startMatchFromLobby(game).round.dealerIndex);
+    const started = startMatchFromLobby(game);
+    seen.add(started.round.dealerIndex);
+    assert.equal(started.round.dealerPlayerId, game.seating[started.round.dealerIndex]);
+    assert.equal(getDealerPlayerId(started.round, game.seating), started.round.dealerPlayerId);
   }
 
   assert.ok(seen.size > 1, 'dealer index should not always be fixed');
   assert.ok([...seen].every((value) => value >= 0 && value < 4));
+});
+
+
+test('analyzeMove stays aligned with applied scoring bonuses', () => {
+  const five = card('5', '♠', 'h5');
+  const boardCard = card('5', '♥', 'b5');
+  const game = buildGame({
+    scoreA: 36,
+    board: [boardCard],
+    hostHand: [five],
+    lastPlayedCard: {
+      cardId: 'b5',
+      rank: '5',
+      playerId: 'p4',
+      turnNumber: 1,
+      dealNumber: 1,
+    },
+  });
+
+  const move = getLegalMoves(game.round, 'p1').find((candidate) => candidate.type === 'match');
+  const analysis = analyzeMove(game, 'p1', move);
+  const next = applyMove(game, 'p1', move);
+
+  assert.equal(analysis.bonusPoints, next.scores.A - game.scores.A);
+  assert.equal(analysis.isCaida, true);
+  assert.equal(analysis.isLimpia, true);
 });

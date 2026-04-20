@@ -44,6 +44,14 @@ function rotateOrder(playerIds, dealerIndex) {
   return [...playerIds.slice(start), ...playerIds.slice(0, start)];
 }
 
+export function getDealerPlayerId(round, seating = []) {
+  if (round?.dealerPlayerId) return round.dealerPlayerId;
+  if (typeof round?.dealerIndex === 'number' && round.dealerIndex >= 0) {
+    return seating[round.dealerIndex] || null;
+  }
+  return Array.isArray(round?.turnOrder) && round.turnOrder.length ? round.turnOrder[round.turnOrder.length - 1] : null;
+}
+
 function countRanks(cards) {
   const counts = {};
   for (const card of cards) counts[card.rank] = (counts[card.rank] || 0) + 1;
@@ -165,6 +173,7 @@ function buildRound(players, dealerIndex, scores, handNumber = 1) {
   const hands = {};
   const capturePiles = { A: [], B: [] };
   const roundOrder = rotateOrder(seating, dealerIndex);
+  const dealerPlayerId = seating[dealerIndex];
 
   for (const playerId of seating) hands[playerId] = [];
   for (let deal = 0; deal < 2; deal += 1) {
@@ -178,6 +187,7 @@ function buildRound(players, dealerIndex, scores, handNumber = 1) {
   const round = {
     handNumber,
     dealerIndex,
+    dealerPlayerId,
     turnOrder: roundOrder,
     turnPlayerId: roundOrder[0],
     activeDeal: 1,
@@ -285,6 +295,7 @@ export function getLegalMoves(round, playerId) {
     if (NUMERIC_RANKS.has(card.rank)) {
       const additions = subsetCaptures(board, card.value);
       for (const set of additions) {
+        if (set.length === 1 && set[0].rank === card.rank) continue;
         const captured = applySequence(board, set, card);
         const text = set.map((c) => `${c.rank}${c.suit}`).join(' + ');
         moves.push({
@@ -316,12 +327,66 @@ function summarizeCard(card) {
   return `${card.rank}${card.suit}`;
 }
 
+function matchingMove(candidate, move) {
+  return candidate.type === move.type
+    && candidate.playedCardId === move.playedCardId
+    && JSON.stringify(candidate.captureIds || []) === JSON.stringify(move.captureIds || []);
+}
+
+export function analyzeMove(game, playerId, move) {
+  if (!game?.round || !move) {
+    return {
+      move: null,
+      captureCount: 0,
+      sequenceCount: 0,
+      isCaida: false,
+      isLimpia: false,
+      bonusPoints: 0,
+    };
+  }
+
+  const round = game.round;
+  const selected = getLegalMoves(round, playerId).find((candidate) => matchingMove(candidate, move));
+  if (!selected) {
+    return {
+      move: null,
+      captureCount: 0,
+      sequenceCount: 0,
+      isCaida: false,
+      isLimpia: false,
+      bonusPoints: 0,
+    };
+  }
+
+  const captureSet = new Set(selected.captureIds || []);
+  const targetCount = (selected.targetIds || []).length;
+  const teamId = round.teamsByPlayer?.[playerId]?.teamId;
+  const scoreBefore = game.scores?.[teamId] || 0;
+  const remainingBoardCards = (round.board || []).filter((card) => !captureSet.has(card.id)).length;
+  const isCaida = selected.type === 'match'
+    && Boolean(round.lastPlayedCard)
+    && selected.targetIds?.[0] === round.lastPlayedCard.cardId
+    && round.lastPlayedCard.dealNumber === round.activeDeal
+    && round.lastPlayedCard.turnNumber === round.playsInCurrentDeal;
+  const isLimpia = selected.type !== 'trail' && remainingBoardCards === 0 && scoreBefore < 38;
+
+  return {
+    move: selected,
+    captureCount: captureSet.size,
+    sequenceCount: Math.max(0, captureSet.size - targetCount),
+    isCaida,
+    isLimpia,
+    bonusPoints: (isCaida ? 2 : 0) + (isLimpia ? 2 : 0),
+  };
+}
+
 function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };
   const a = round.capturedCardCount.A;
   const b = round.capturedCardCount.B;
-  const dealerTeam = round.teamsByPlayer[round.turnOrder[round.dealerIndex]]?.teamId || 'A';
+  const dealerPlayerId = getDealerPlayerId(round, game.seating);
+  const dealerTeam = dealerPlayerId ? (round.teamsByPlayer[dealerPlayerId]?.teamId || 'A') : 'A';
   const nonDealerTeam = dealerTeam === 'A' ? 'B' : 'A';
   const now = Date.now();
 
@@ -397,10 +462,8 @@ export function applyMove(game, playerId, move) {
   round.events = Array.isArray(round.events) ? round.events : [];
   if (round.turnPlayerId !== playerId) throw new Error('Not your turn.');
 
-  const legalMoves = getLegalMoves(round, playerId);
-  const selected = legalMoves.find((candidate) =>
-    candidate.type === move.type && candidate.playedCardId === move.playedCardId && JSON.stringify(candidate.captureIds || []) === JSON.stringify(move.captureIds || [])
-  );
+  const analysis = analyzeMove({ ...game, round }, playerId, move);
+  const selected = analysis.move;
   if (!selected) throw new Error('Illegal move.');
 
   const hand = round.hands[playerId];
@@ -422,15 +485,8 @@ export function applyMove(game, playerId, move) {
     round.capturePiles[teamId].push(playedCard, ...capturedCards);
     round.capturedCardCount[teamId] += capturedCards.length + 1;
 
-    const isCaida = selected.type === 'match'
-      && round.lastPlayedCard
-      && selected.targetIds?.[0] === round.lastPlayedCard.cardId
-      && round.lastPlayedCard.dealNumber === round.activeDeal
-      && round.lastPlayedCard.turnNumber === round.playsInCurrentDeal;
-    if (isCaida) pointsEarned += 2;
-
-    const wouldBeLimpia = round.board.length === 0;
-    if (wouldBeLimpia && game.scores[teamId] < 38) pointsEarned += 2;
+    if (analysis.isCaida) pointsEarned += 2;
+    if (analysis.isLimpia) pointsEarned += 2;
 
     round.scores[teamId] += pointsEarned;
     round.lastPlayedCard = null;
