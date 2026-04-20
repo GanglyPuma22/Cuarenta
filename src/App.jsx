@@ -291,70 +291,72 @@ function LobbySeat({ player, isCurrent, slot }) {
   );
 }
 
-function TurnOrder({ game, currentPlayerId }) {
+function MatchStatePanel({ game, currentPlayerId }) {
+  const teams = teamSummary(game);
+  const currentTeamId = game?.round?.teamsByPlayer?.[currentPlayerId]?.teamId;
+  const currentTurnName = game?.round?.turnPlayerId ? (game?.players?.[game.round.turnPlayerId]?.name || '—') : '—';
+
+  return (
+    <section className="sidebar-panel score-sidebar">
+      <div className="section-kicker">Match state</div>
+      <h2 className="sidebar-title">Board-side essentials</h2>
+      <div className="sidebar-scorecards">
+        {teams.map((team) => (
+          <div key={team.teamId} className={`side-team-card ${team.teamId === currentTeamId ? 'current-team' : ''}`}>
+            <div className="side-team-head">
+              <span className="side-team-label">Team {team.teamId}</span>
+              <div className="side-team-score">{team.score}<small>/40</small></div>
+            </div>
+            <div className="side-team-players">{team.players.map((player) => player?.name).filter(Boolean).join(' & ')}</div>
+            <div className="side-team-meta">Captured this hand <strong>{team.captured}</strong></div>
+          </div>
+        ))}
+      </div>
+      <div className="round-brief" aria-label="Round state">
+        <div>
+          <span>Hand</span>
+          <strong>{game?.round?.handNumber ?? '?'}</strong>
+        </div>
+        <div>
+          <span>Deal</span>
+          <strong>{game?.round?.activeDeal ?? '?'}</strong>
+        </div>
+        <div>
+          <span>Turn</span>
+          <strong>{currentTurnName}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TurnOrderPanel({ game, currentPlayerId }) {
   const seating = game?.seating?.map((id) => game.players[id]) || [];
   const currentTurn = game?.round?.turnPlayerId;
   const dealerPlayerId = getDealerPlayerId(game?.round, game?.seating);
-  const teams = teamSummary(game);
-  const currentTeamId = game?.round?.teamsByPlayer?.[currentPlayerId]?.teamId;
-  const currentTurnName = currentTurn ? (game?.players?.[currentTurn]?.name || '—') : '—';
 
   return (
-    <aside className="sidebar-column">
-      <section className="sidebar-panel score-sidebar">
-        <div className="section-kicker">Match state</div>
-        <h2 className="sidebar-title">Board-side essentials</h2>
-        <div className="sidebar-scorecards">
-          {teams.map((team) => (
-            <div key={team.teamId} className={`side-team-card ${team.teamId === currentTeamId ? 'current-team' : ''}`}>
-              <div className="side-team-head">
-                <span className="side-team-label">Team {team.teamId}</span>
-                <div className="side-team-score">{team.score}<small>/40</small></div>
+    <section className="activity-card order-card">
+      <div className="section-kicker">Table order</div>
+      <div className="activity-title">Who acts next</div>
+      <div className="timeline compact">
+        {seating.map((player, index) => (
+          <div key={player.id} className={`timeline-item ${currentTurn === player.id ? 'active' : ''}`}>
+            <div className="timeline-dot" />
+            <div className="timeline-copy">
+              <div className="timeline-kicker">{playerLabel(index, currentPlayerId, player, game.round, game)}</div>
+              <div className="timeline-row single-line">
+                <span className="timeline-name">{player.name}</span>
               </div>
-              <div className="side-team-players">{team.players.map((player) => player?.name).filter(Boolean).join(' & ')}</div>
-              <div className="side-team-meta">Captured this hand <strong>{team.captured}</strong></div>
-            </div>
-          ))}
-        </div>
-        <div className="round-brief" aria-label="Round state">
-          <div>
-            <span>Hand</span>
-            <strong>{game?.round?.handNumber ?? '?'}</strong>
-          </div>
-          <div>
-            <span>Deal</span>
-            <strong>{game?.round?.activeDeal ?? '?'}</strong>
-          </div>
-          <div>
-            <span>Turn</span>
-            <strong>{currentTurnName}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="sidebar-panel">
-        <div className="section-kicker">Table order</div>
-        <h2 className="sidebar-title">Who acts next</h2>
-        <div className="timeline">
-          {seating.map((player, index) => (
-            <div key={player.id} className={`timeline-item ${currentTurn === player.id ? 'active' : ''}`}>
-              <div className="timeline-dot" />
-              <div className="timeline-copy">
-                <div className="timeline-kicker">{playerLabel(index, currentPlayerId, player, game.round, game)}</div>
-                <div className="timeline-row">
-                  <span className="timeline-name">{player.name}</span>
-                  <span className="timeline-score">{scoreForPlayer(game, player.id)}<small>/40</small></span>
-                </div>
-                <div className="timeline-flags">
-                  {player.id === dealerPlayerId ? <span className="timeline-flag">Dealer</span> : null}
-                  {currentTurn === player.id ? <span className="timeline-flag current">On move</span> : null}
-                </div>
+              <div className="timeline-flags">
+                {player.id === dealerPlayerId ? <span className="timeline-flag">Dealer</span> : null}
+                {currentTurn === player.id ? <span className="timeline-flag current">On move</span> : null}
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-    </aside>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -642,47 +644,59 @@ function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, acti
   );
 }
 
-function ActivityPanel({ round, game, currentPlayerId, onCopyShareLink, linkCopied }) {
+function PlayerPanel({ round, game, currentPlayerId }) {
   const me = game?.players?.[currentPlayerId];
   const teamId = round?.teamsByPlayer?.[currentPlayerId]?.teamId;
   const seat = round?.teamsByPlayer?.[currentPlayerId]?.seat;
-  const recent = (round?.events || []).slice(0, 5);
   const dealerPlayerId = getDealerPlayerId(round, game?.seating);
   const dealerName = dealerPlayerId ? game?.players?.[dealerPlayerId]?.name : '';
 
   return (
-    <aside className="activity-column">
-      <div className="activity-card utility-card">
+    <section className="profile-card player-sidebar">
+      <div className="section-kicker">Player</div>
+      <div className="profile-avatar">{(me?.name || '?').slice(0, 1).toUpperCase()}</div>
+      <div className="profile-name">{me?.name || 'Player'}</div>
+      <div className="profile-sub">Seat {seat || '?'} · Team {teamId || '?'}</div>
+      <div className="profile-stats">
+        <div><span>Team score</span><strong>{teamId ? (game.scores?.[teamId] || 0) : 0}</strong></div>
+        <div><span>Cards won</span><strong>{teamId ? (round.capturedCardCount?.[teamId] || 0) : 0}</strong></div>
+      </div>
+      <div className="profile-tags">
+        {dealerName ? <span className="profile-tag">Dealer: {dealerName}</span> : null}
+        <span className="profile-tag">Goal: first to 40</span>
+      </div>
+    </section>
+  );
+}
+
+function RecentCallsPanel({ round }) {
+  const recent = (round?.events || []).slice(0, 5);
+
+  return (
+    <section className="activity-card recent-calls-card">
+      <div className="section-kicker">Recent table calls</div>
+      <div className="activity-title">Latest calls</div>
+      <ul>
+        {recent.map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}
+      </ul>
+    </section>
+  );
+}
+
+function ReconnectDock({ game, onCopyShareLink, linkCopied }) {
+  return (
+    <details className="reconnect-dock">
+      <summary className="secondary-chip reconnect-summary">Reconnect</summary>
+      <div className="reconnect-popover">
         <div className="section-kicker">Reconnect</div>
-        <div className="activity-title">Keep the table link close</div>
+        <div className="reconnect-title">Keep the table link close</div>
         <p className="utility-copy">Same browser + same link reconnects cleanly. Device handoff still is not part of this build.</p>
         <div className="utility-row">
           <span className="profile-tag">Game {game?.code}</span>
           <button type="button" className="secondary-button utility-button" onClick={onCopyShareLink}>{linkCopied ? 'Link copied' : 'Copy rejoin link'}</button>
         </div>
       </div>
-
-      <div className="profile-card">
-        <div className="profile-avatar">{(me?.name || '?').slice(0, 1).toUpperCase()}</div>
-        <div className="profile-name">{me?.name || 'Player'}</div>
-        <div className="profile-sub">Seat {seat || '?'} · Team {teamId || '?'}</div>
-        <div className="profile-stats">
-          <div><span>Team score</span><strong>{teamId ? (game.scores?.[teamId] || 0) : 0}</strong></div>
-          <div><span>Cards won</span><strong>{teamId ? (round.capturedCardCount?.[teamId] || 0) : 0}</strong></div>
-        </div>
-        <div className="profile-tags">
-          {dealerName ? <span className="profile-tag">Dealer: {dealerName}</span> : null}
-          <span className="profile-tag">Goal: first to 40</span>
-        </div>
-      </div>
-
-      <div className="activity-card">
-        <div className="activity-title">Recent table calls</div>
-        <ul>
-          {recent.map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}
-        </ul>
-      </div>
-    </aside>
+    </details>
   );
 }
 
@@ -1025,7 +1039,8 @@ export default function App() {
         <div className="topbar-actions">
           {showGameChrome ? <button type="button" className="secondary-chip" onClick={returnHome}>Home</button> : null}
           {showGameChrome ? <GameCode code={gameCode} /> : null}
-          {showGameChrome ? <button type="button" className="header-button" onClick={copyShareLink}>{linkCopied ? 'Link copied' : 'Share link'}</button> : null}
+          {game && round && isParticipant ? <ReconnectDock game={game} onCopyShareLink={copyShareLink} linkCopied={linkCopied} /> : null}
+          {showGameChrome && !(game && round && isParticipant) ? <button type="button" className="header-button" onClick={copyShareLink}>{linkCopied ? 'Link copied' : 'Share link'}</button> : null}
         </div>
       </header>
 
@@ -1113,7 +1128,10 @@ export default function App() {
 
       {game && round && isParticipant ? (
         <section className="game-layout">
-          <TurnOrder game={game} currentPlayerId={playerId} />
+          <aside className="sidebar-column">
+            <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
+            <MatchStatePanel game={game} currentPlayerId={playerId} />
+          </aside>
           <section className="center-column">
             <TurnBanner
               game={game}
@@ -1160,13 +1178,10 @@ export default function App() {
             />
             {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
           </section>
-          <ActivityPanel
-            round={round}
-            game={game}
-            currentPlayerId={playerId}
-            onCopyShareLink={copyShareLink}
-            linkCopied={linkCopied}
-          />
+          <aside className="activity-column">
+            <TurnOrderPanel game={game} currentPlayerId={playerId} />
+            <RecentCallsPanel round={round} />
+          </aside>
         </section>
       ) : null}
 

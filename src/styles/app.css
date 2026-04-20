@@ -120,6 +120,39 @@ button:disabled {
   gap: 10px;
 }
 
+.reconnect-dock {
+  position: relative;
+}
+
+.reconnect-summary {
+  list-style: none;
+  user-select: none;
+}
+
+.reconnect-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reconnect-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(252, 247, 240, 0.98);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow);
+  z-index: 25;
+}
+
+.reconnect-title {
+  margin-top: 8px;
+  font-family: 'Noto Serif', serif;
+  font-size: 20px;
+  color: var(--primary-deep);
+}
+
 .header-button,
 .share-pill,
 .notice-card,
@@ -648,6 +681,10 @@ button:focus-visible {
   justify-content: space-between;
   gap: 10px;
   align-items: end;
+}
+
+.timeline-row.single-line {
+  justify-content: flex-start;
 }
 
 .timeline-name {
@@ -1290,6 +1327,11 @@ button:focus-visible {
   gap: 16px;
 }
 
+.order-card .activity-title,
+.recent-calls-card .activity-title {
+  margin-top: 8px;
+}
+
 .utility-card {
   display: grid;
   gap: 12px;
@@ -1317,6 +1359,20 @@ button:focus-visible {
 
 .profile-card {
   text-align: center;
+}
+
+.player-sidebar {
+  text-align: left;
+}
+
+.player-sidebar .section-kicker,
+.player-sidebar .profile-sub,
+.player-sidebar .profile-tags {
+  justify-content: flex-start;
+}
+
+.player-sidebar .profile-avatar {
+  margin: 4px 0 12px;
 }
 
 .profile-avatar {
@@ -1443,6 +1499,12 @@ button:focus-visible {
 @media (max-width: 760px) {
   .topbar {
     padding: 0 14px;
+  }
+
+  .reconnect-popover {
+    right: 0;
+    left: auto;
+    width: min(300px, calc(100vw - 24px));
   }
 
   .brand-block {
