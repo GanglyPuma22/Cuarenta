@@ -58,7 +58,7 @@
               ".validate": "newData.isString() && newData.val() === $playerId && (!data.exists() || newData.val() === data.val())"
             },
             "name": {
-              ".validate": "newData.isString() && newData.val().matches(/^.{1,24}$/)"
+              ".validate": "newData.isString() && newData.val().matches(/^.{1,24}$/) && (!data.exists() || newData.val() === data.val())"
             },
             "joinedAt": {
               ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())"
@@ -83,7 +83,7 @@
         "seating": {
           ".validate": "newData.child('0').isString() && !newData.child('4').exists()",
           "$other": {
-            ".validate": "newData.isString() && newData.parent().parent().child('players').child(newData.val()).exists()"
+            ".validate": "$other.matches(/^[0-3]$/) && newData.isString() && newData.parent().parent().child('players').child(newData.val()).exists()"
           }
         },
         "session": {

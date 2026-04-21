@@ -41,6 +41,11 @@ let databaseUrl = '';
 let firebaseMode = 'unconfigured';
 let firebaseConfigError = '';
 
+function ignoreIfAlreadyConnected(error) {
+  const message = String(error?.message || '');
+  return message.includes('already been called') || message.includes('already uses') || message.includes('already connected');
+}
+
 if (useEmulator) {
   const projectId = liveConfig.projectId || 'cuarenta-local';
   app = initializeApp({
@@ -57,13 +62,19 @@ if (useEmulator) {
   db = getDatabase(app);
   try {
     connectAuthEmulator(auth, `http://${authEmulatorHost}:${authEmulatorPort}`, { disableWarnings: true });
-  } catch {
-    // Vite HMR can re-run this module after the auth instance is already connected.
+  } catch (error) {
+    if (!ignoreIfAlreadyConnected(error)) {
+      console.error('Failed to connect Firebase Auth emulator.', error);
+      throw error;
+    }
   }
   try {
     connectDatabaseEmulator(db, emulatorHost, emulatorPort);
-  } catch {
-    // Vite HMR can re-run this module after the database instance is already connected.
+  } catch (error) {
+    if (!ignoreIfAlreadyConnected(error)) {
+      console.error('Failed to connect Firebase RTDB emulator.', error);
+      throw error;
+    }
   }
   databaseUrl = `http://${emulatorHost}:${emulatorPort}?ns=${projectId}-default-rtdb`;
   firebaseMode = 'emulator';
