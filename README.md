@@ -1,88 +1,136 @@
 # Cuarenta
 
-Fresh React + Vite rewrite of the old repo.
+A pragmatic four-player Cuarenta web app built with React, Vite, and Firebase Realtime Database.
 
-## What this build already does
+![Cuarenta gameplay screenshot](docs/assets/gameplay-screenshot.png)
+
+## What this is
+
+This repo is a modern rewrite of an older Cuarenta project. The current build focuses on the part that actually matters for real play:
+
+- create a room fast
+- seat four players
+- share a reconnectable link
+- play a full match to 40
+- preview captures clearly before committing
+
+It is not trying to be a full commercial card-game platform. It is a playable, opinionated web implementation of Cuarenta with better move clarity than a barebones lobby-and-cards prototype.
+
+Rules source used for this build: <https://www.pagat.com/fishing/cuarenta.html>
+
+## Who this is for
+
+- people who already know Cuarenta and want a browser-based table
+- friends/family groups who want quick private games
+- developers curious about a small Firebase-backed multiplayer card game
+
+If you want polished matchmaking, accounts, cosmetics, or anti-cheat hardening, this is not that repo.
+
+## Current status
+
+This project is **playable and credibly open-sourceable soon**, but still **demo-grade infrastructure-wise**.
+
+The UX and game flow are real. The backend trust model is improved, but not fully hardened for hostile internet traffic. The current posture is good for personal use, small-group sharing, and open-sourcing with honest caveats.
+
+## What already works
+
 - 4-player lobby using Firebase Realtime Database
-- Host creates a 6-character room code
-- Players join by code with just a display name (no auth UI yet)
-- Every game gets a shareable rejoin URL (`?game=ABC123`) and the current browser remembers the last active session
-- Existing seated players can reopen the saved URL on the same browser and resume mid-game instead of getting locked out by the lobby-only join flow
-- Drag-first card play: drag onto the table to trail, onto highlighted board cards to match, or onto capture lanes / live targets for addition captures
-- Stronger move previews: hoverable board targets carry match/addition semantics, the table groups exact target vs sequence cards, and the UI shows capture order, caída targets, and scoring swing badges before you commit
-- In-app rules + scoring reference drawer for the high-value Cuarenta edge cases
-- Host vets joined names and starts when 4 seats are filled
-- Opening dealer is chosen randomly among the seated players for a fairer start
-- Teams are seat-based: seats 1 & 3 vs seats 2 & 4
-- Actual turn-based Cuarenta game flow with matching captures, A-7 addition captures, automatic upward sequence capture, caída, limpia, ronda handling, two deals of five cards, end-of-hand card-count scoring, and repeated hands until a team reaches 40
+- host creates a 6-character room code
+- players join by code with a display name
+- silent Firebase **anonymous auth** on load; no account UI required
+- shareable rejoin URL (`?game=ABC123`)
+- same-browser reconnect using the saved anonymous Firebase session
+- drag-first card play: trail, match, or addition capture directly from the hand
+- move previews that show target cards, sequence capture, caída, limpia, and scoring swing before commit
+- in-app rules + scoring drawer for common edge cases
+- full match flow with two deals of five cards, hand scoring, and repeated hands until a team reaches 40
 
-Rules source used: https://www.pagat.com/fishing/cuarenta.html
+## Auth / trust model
 
-## Tech
-- React 19
-- Vite
-- Firebase Realtime Database
+Anonymous Firebase auth is the intended 90/10 fit here.
 
-## Local setup
+Why it fits this project:
+
+- the app needs **ephemeral per-player identity**, not durable user accounts
+- same-browser reconnect matters more than email/password login
+- the extra friction of real accounts is not justified for a casual four-player card game
+
+What changed in this pass:
+
+- the app now signs each browser into Firebase anonymously before touching the database
+- local emulator setup now expects **Auth + Realtime Database** together
+- Realtime Database rules now require authenticated access instead of allowing open writes
+- lobby creation/joining is tied to the caller's anonymous Firebase uid
+- only the **current turn player** is allowed to submit gameplay writes once a match is live
+
+What this still does **not** solve:
+
+- gameplay is still client-authoritative
+- a malicious current-turn player could still try to submit a forged but valid-looking game state
+- there is no server-side move validation, rate limiting, abuse review, or cleanup worker yet
+
+So: anonymous auth is enough for the repo's current use case **if the goal is lightweight participation with a materially safer public demo surface**. It is **not** the final answer if the goal becomes a truly hardened public game service.
+
+## Safe local setup
+
+### 1. Install dependencies
+
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
 ```
 
-Open the local URL Vite prints (usually `http://localhost:5173/`).
+### 2. Copy env
 
-### Safe default: use the RTDB emulator
-The committed `.env.example` now defaults to the Firebase Realtime Database emulator instead of a real shared project.
-
-Typical flow:
 ```bash
 cp .env.example .env.local
-# leave VITE_USE_FIREBASE_EMULATOR=true
-firebase emulators:start --only database
+```
+
+### 3. Start Firebase emulators
+
+```bash
+npx firebase-tools@latest emulators:start --only auth,database
+```
+
+### 4. Run the app
+
+```bash
 npm run dev
 ```
 
-### If you intentionally want a real Firebase project
-Set `VITE_USE_FIREBASE_EMULATOR=false` and fill every `VITE_FIREBASE_*` variable in `.env.local`.
+Then open the local Vite URL, usually <http://localhost:5173/>.
 
-The app no longer bakes the current live Firebase web config into source code. If you do not provide config, the UI renders a clear setup notice instead of silently talking to a real backend.
+## Using a real Firebase project on purpose
+
+If you want a real shared backend instead of the emulator:
+
+1. set `VITE_USE_FIREBASE_EMULATOR=false` in `.env.local`
+2. fill every `VITE_FIREBASE_*` value
+3. enable **Anonymous** auth in Firebase Authentication
+4. deploy the included Realtime Database rules before sharing the app
+
+The app no longer bakes a live Firebase web config into source code. If config is missing, it fails loudly instead of quietly talking to a real backend.
 
 ## Tests / build
+
 ```bash
 npm test
 npm run build
 ```
 
-## Firebase / public-surface notes
-This repo is **closer** to OSS-safe than before, but it is **not fully public-safe yet**.
+## Deployment notes
 
-What changed in this pass:
-- the app no longer defaults local dev builds to the real live Firebase project
-- `.env.example` points contributors toward the emulator first
-- `database.rules.json` now enforces a tighter public shape: valid room code, 1-4 players, 1-4 seats, bounded player names, bounded scores, and bounded session metadata instead of allowing nearly-arbitrary payloads
-- README setup/deploy guidance now makes the backend choice explicit
+### Build for a hosted subpath
 
-What is still intentionally rough:
-- there is still no auth UI, so the game path still relies on public reads/writes to function
-- shape validation is better, but it is not a substitute for anonymous/custom auth
-- a determined attacker can still write valid-looking game traffic and churn rooms
-- there is no quota / abuse-control story in-repo yet (alerts, App Check, rate limiting via server-side mediation, cleanup jobs, etc.)
+For a path like `itsyasha.com/cuarenta`:
 
-### Realtime Database path
-- `games/<CODE>`
-
-## Hosting / deployment
-Production builds should be explicit about which backend they target.
-
-### Build for a hosted path
-For `itsyasha.com/cuarenta`, build with:
 ```bash
 VITE_BASE_PATH=/cuarenta/ npm run build
 ```
 
 ### Build against a real Firebase project
+
 Do this only on purpose, with env vars present in the same shell:
+
 ```bash
 set -a
 source .env.local
@@ -90,8 +138,8 @@ set +a
 npm run build
 ```
 
-### Firebase Hosting / RTDB deploy
-Once Firebase CLI is installed and authenticated:
+### Firebase Hosting + RTDB deploy
+
 ```bash
 set -a
 source .env.local
@@ -100,16 +148,29 @@ npm run build
 firebase deploy --only hosting,database
 ```
 
-If you deploy behind another web server instead of Firebase Hosting, serve `dist/` at the same base path you built for and keep SPA rewrites enabled.
+If you deploy somewhere other than Firebase Hosting, serve `dist/` at the base path you built for and keep SPA rewrites enabled.
 
-## Current limitations / follow-up
-- No auth UI. Identity is still a local browser-generated player id plus chosen name, so true seat ownership still wants anonymous/custom auth.
-- Rejoin is intentionally same-browser and same-local-player-id. It is robust for refresh/disconnect/reopen, not for arbitrary device handoff.
-- Ronda-caida 10-point remembered bonus is not implemented yet.
-- The app auto-previews and auto-takes the full visible sequence for any chosen capture, so the real-world “missed sequence can be stolen by opponents” memory test is intentionally removed from the UI flow.
-- The UI is more intentional and compact than before, but it is still a pragmatic drag-first web implementation, not a fully animated premium card-game presentation.
+## Limitations / non-goals
 
-## Honest OSS-readiness status
-Current status: **not public-ready yet, but no longer casually dangerous by default**.
+- no durable account system
+- reconnect is intentionally same-browser, not cross-device handoff
+- still no server-authoritative move validation
+- the remembered ronda-caída +10 bonus is still not implemented
+- the UI chooses clarity over theatrical animation
+- the app auto-previews and auto-takes the visible sequence instead of forcing players to remember it manually
 
-The repo moved from “clone it and silently hit the live backend” toward “clone it and either use the emulator or opt into a real project on purpose.” The remaining real blocker before public visibility is the backend trust model, not the frontend build setup.
+## OSS notes
+
+This repo now has the minimum credible public-facing surface for an eventual open-source release:
+
+- MIT license
+- safer default local setup via emulator-first docs
+- screenshot in-repo for README/release use
+- explicit auth/safety/limitations section
+- release-draft notes in `docs/release-draft.md`
+
+The remaining serious blocker for a truly public internet demo is still the lack of server-authoritative move enforcement.
+
+## License
+
+[MIT](LICENSE)
