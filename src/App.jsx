@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { get, onValue, ref, runTransaction } from 'firebase/database';
-import { db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
-import { getLocalPlayerId, getSavedName, saveName } from './lib/localPlayer';
+import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
+import { getSavedName, saveName } from './lib/localPlayer';
 import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
@@ -690,7 +691,7 @@ function ReconnectDock({ game, onCopyShareLink, linkCopied }) {
       <div className="reconnect-popover">
         <div className="section-kicker">Reconnect</div>
         <div className="reconnect-title">Keep the table link close</div>
-        <p className="utility-copy">Same browser + same link reconnects cleanly. Device handoff still is not part of this build.</p>
+        <p className="utility-copy">Same browser + same anonymous Firebase session + same link reconnects cleanly. Device handoff still is not part of this build.</p>
         <div className="utility-row">
           <span className="profile-tag">Game {game?.code}</span>
           <button type="button" className="secondary-button utility-button" onClick={onCopyShareLink}>{linkCopied ? 'Link copied' : 'Copy rejoin link'}</button>
@@ -724,9 +725,18 @@ export default function App() {
   const [dragCardId, setDragCardId] = useState('');
   const [previewMoveKey, setPreviewMoveKey] = useState('');
   const [referenceTab, setReferenceTab] = useState('');
+  const [authState, setAuthState] = useState(() => ({
+    status: hasFirebase ? 'loading' : 'unconfigured',
+    playerId: '',
+    error: '',
+  }));
 
-  const playerId = useMemo(() => getLocalPlayerId(), []);
-  const gameRef = useMemo(() => (gameCode && hasFirebase ? ref(db, `games/${gameCode}`) : null), [gameCode]);
+  const playerId = authState.playerId;
+  const canUseRealtime = hasFirebase && authState.status === 'ready';
+  const gameRef = useMemo(
+    () => (gameCode && canUseRealtime ? ref(db, `games/${gameCode}`) : null),
+    [gameCode, canUseRealtime]
+  );
 
   function rememberSession(code) {
     saveGameSession(code);
@@ -769,13 +779,81 @@ export default function App() {
   }, [linkCopied]);
 
   useEffect(() => {
+    if (!hasFirebase || !auth) {
+      setAuthState({
+        status: 'unconfigured',
+        playerId: '',
+        error: firebaseConfigError || '',
+      });
+      return undefined;
+    }
+
+    let active = true;
+    let signInPromise = null;
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (user) => {
+        if (!active) return;
+
+        if (user) {
+          setAuthState({ status: 'ready', playerId: user.uid, error: '' });
+          return;
+        }
+
+        if (signInPromise) return;
+        setAuthState({ status: 'signing-in', playerId: '', error: '' });
+
+        signInPromise = signInAnonymously(auth);
+        try {
+          await signInPromise;
+        } catch (authError) {
+          if (!active) return;
+          setAuthState({
+            status: 'error',
+            playerId: '',
+            error: authError.message || 'Anonymous sign-in failed.',
+          });
+        } finally {
+          signInPromise = null;
+        }
+      },
+      (authError) => {
+        if (!active) return;
+        setAuthState({
+          status: 'error',
+          playerId: '',
+          error: authError.message || 'Anonymous sign-in failed.',
+        });
+      }
+    );
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     syncGameUrl(gameCode);
   }, [gameCode]);
 
   useEffect(() => {
-    if (!gameRef) {
+    if (!gameCode || !hasFirebase) {
       setGame(null);
       setGameLoadState('idle');
+      return undefined;
+    }
+
+    if (authState.status === 'error' || authState.status === 'unconfigured') {
+      setGame(null);
+      setGameLoadState('idle');
+      return undefined;
+    }
+
+    if (!gameRef) {
+      setGame(null);
+      setGameLoadState('loading');
       return undefined;
     }
 
@@ -799,7 +877,7 @@ export default function App() {
         setGameLoadState('missing');
       }
     );
-  }, [gameRef]);
+  }, [authState.status, gameCode, gameRef]);
 
   useEffect(() => {
     if (game?.players?.[playerId] && game.code && savedSession?.gameCode !== game.code) {
@@ -878,6 +956,7 @@ export default function App() {
     const trimmed = name.trim();
     if (!trimmed) return setError('Enter your name first.');
     if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
+    if (!playerId) return setError(authState.error || 'Still establishing the anonymous Firebase session. Try again in a second.');
     saveName(trimmed);
     setBusy(true);
     setError('');
@@ -911,6 +990,7 @@ export default function App() {
     const code = normalizeGameCode(gameCode || joinCode);
     if (!trimmed || !isValidGameCode(code)) return setError('Enter your name and a valid 6-character game code.');
     if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
+    if (!playerId) return setError(authState.error || 'Still establishing the anonymous Firebase session. Try again in a second.');
     saveName(trimmed);
     setBusy(true);
     setError('');
@@ -922,21 +1002,6 @@ export default function App() {
       if (!existing) throw new Error('Game not found.');
 
       if (existing.players?.[playerId]) {
-        const result = await runTransaction(joinRef, (current) => {
-          if (!current?.players?.[playerId]) return current;
-          const now = Date.now();
-          current.players[playerId] = {
-            ...current.players[playerId],
-            name: trimmed,
-            lastSeenAt: now,
-            rejoinedAt: now,
-            reconnectCount: (current.players[playerId].reconnectCount || 0) + 1,
-          };
-          stampSessionMetadata(current, { now, action: 'player_rejoined', actorId: playerId });
-          return current;
-        }, { applyLocally: false });
-
-        if (!result?.snapshot?.exists()) throw new Error('Game not found.');
         rememberSession(code);
         setJoinCode(code);
         setGameCode(code);
@@ -978,6 +1043,7 @@ export default function App() {
 
   async function startGame() {
     if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
+    if (!playerId) return setError(authState.error || 'Still establishing the anonymous Firebase session. Try again in a second.');
     if (!game || game.hostId !== playerId) return;
     if ((game.seating || []).length !== 4) return setError('Need exactly 4 players.');
     setBusy(true);
@@ -993,6 +1059,7 @@ export default function App() {
 
   async function playChosenMove(move) {
     if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
+    if (!playerId) return setError(authState.error || 'Still establishing the anonymous Firebase session. Try again in a second.');
     if (!move) return;
     setDragCardId('');
     setPreviewMoveKey('');
@@ -1006,8 +1073,10 @@ export default function App() {
   }
 
   const firebaseUnavailable = firebaseMode === 'unconfigured';
-  const showHome = !gameCode || gameLoadState === 'missing' || firebaseUnavailable;
-  const showGameChrome = Boolean(gameCode) && gameLoadState !== 'missing' && !firebaseUnavailable;
+  const authPending = hasFirebase && authState.status !== 'ready' && authState.status !== 'error' && authState.status !== 'unconfigured';
+  const authFailed = authState.status === 'error';
+  const showHome = !gameCode || gameLoadState === 'missing' || firebaseUnavailable || authFailed;
+  const showGameChrome = Boolean(gameCode) && gameLoadState !== 'missing' && !firebaseUnavailable && !authFailed;
   const shareUrl = showGameChrome ? buildGameUrl(gameCode) : '';
 
   return (
@@ -1064,13 +1133,13 @@ export default function App() {
               <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} placeholder="Mateo V." />
             </label>
             <div className="button-stack">
-              <button className="primary-button" disabled={busy || !hasFirebase} onClick={createGame}>Host game</button>
+              <button className="primary-button" disabled={busy || !canUseRealtime} onClick={createGame}>Host game</button>
             </div>
             <div className="join-inline">
               <input value={joinCode} onChange={(event) => setJoinCode(normalizeGameCode(event.target.value))} placeholder="Enter code" maxLength={6} />
-              <button className="secondary-button" disabled={busy || !hasFirebase} onClick={joinGame}>Join</button>
+              <button className="secondary-button" disabled={busy || !canUseRealtime} onClick={joinGame}>Join</button>
             </div>
-            <div className="ghost-note">This browser remembers the current seat, so a refresh does not quietly murder the match.</div>
+            <div className="ghost-note">This build signs the browser in anonymously behind the scenes. Same browser + same link keeps your seat; there is still no account system.</div>
           </section>
           {savedSession ? (
             <section className="resume-card">
@@ -1090,6 +1159,18 @@ export default function App() {
       {firebaseUnavailable ? (
         <section className="notice-card">
           {firebaseConfigError}
+        </section>
+      ) : null}
+
+      {authPending ? (
+        <section className="notice-card">
+          Signing this browser into Firebase anonymously… no email, password, or profile setup required.
+        </section>
+      ) : null}
+
+      {authFailed ? (
+        <section className="notice-card">
+          Anonymous Firebase sign-in failed. {authState.error || 'Enable Anonymous Auth for the project or start the Auth emulator for local work.'}
         </section>
       ) : null}
 
@@ -1114,12 +1195,12 @@ export default function App() {
                 Your name
                 <input value={name} onChange={(event) => setName(event.target.value)} maxLength={24} placeholder="Mateo V." />
               </label>
-              <button className="primary-button" disabled={busy || !hasFirebase} onClick={joinGame}>Take a seat</button>
-              <div className="ghost-note">Open this same link later on this browser and you will land back in the game instead of getting bounced to the lobby.</div>
+              <button className="primary-button" disabled={busy || !canUseRealtime} onClick={joinGame}>Take a seat</button>
+              <div className="ghost-note">Open this same link later on this browser and the anonymous session will drop you back into the same seat instead of bouncing you to the lobby.</div>
             </section>
           ) : (
             <div className="lobby-actions">
-              {isHost ? <button className="primary-button wide" disabled={busy || (game.seating || []).length !== 4} onClick={startGame}>Start game</button> : null}
+              {isHost ? <button className="primary-button wide" disabled={busy || !canUseRealtime || (game.seating || []).length !== 4} onClick={startGame}>Start game</button> : null}
               <div className="lobby-footnote">Requires 4 players to begin</div>
             </div>
           )}
