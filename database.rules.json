@@ -3,22 +3,22 @@
     ".read": false,
     ".write": false,
     "games": {
-      ".read": true,
+      ".read": false,
       "$code": {
-        ".read": true,
-        ".write": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/)",
+        ".read": "auth != null",
+        ".write": "auth != null && $code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && ((!data.exists() && newData.child('hostId').val() === auth.uid && newData.child('players').child(auth.uid).exists() && newData.child('players').child(auth.uid).child('id').val() === auth.uid && newData.child('players').child(auth.uid).child('isHost').val() === true && newData.child('seating/0').val() === auth.uid && !newData.child('seating/1').exists()) || (data.exists() && data.child('status').val() === 'lobby' && ((data.child('hostId').val() === auth.uid && data.child('players').child(auth.uid).exists()) || (!data.child('players').child(auth.uid).exists() && !data.child('seating/3').exists() && newData.child('status').val() === 'lobby' && newData.child('players').child(auth.uid).exists() && newData.child('players').child(auth.uid).child('id').val() === auth.uid && newData.child('players').child(auth.uid).child('isHost').val() === false))) || (data.exists() && data.child('status').val() === 'playing' && data.child('players').child(auth.uid).exists() && data.child('round/turnPlayerId').val() === auth.uid))",
         ".validate": "newData.exists() && newData.hasChildren(['code', 'status', 'hostId', 'createdAt', 'updatedAt', 'lastActivityAt', 'players', 'seating', 'scores', 'session']) && newData.child('code').isString() && newData.child('code').val() === $code && newData.child('status').isString() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished') && newData.child('hostId').isString() && newData.child('players').hasChild(newData.child('hostId').val()) && newData.child('seating/0').isString() && !newData.child('seating/4').exists() && newData.child('scores').hasChildren(['A', 'B'])",
         "code": {
-          ".validate": "newData.isString() && newData.val() === $code"
+          ".validate": "newData.isString() && newData.val() === $code && (!data.exists() || newData.val() === data.val())"
         },
         "status": {
           ".validate": "newData.isString() && (newData.val() === 'lobby' || newData.val() === 'playing' || newData.val() === 'finished')"
         },
         "hostId": {
-          ".validate": "newData.isString() && newData.val().matches(/^.{1,80}$/)"
+          ".validate": "newData.isString() && newData.val().matches(/^.{1,80}$/) && (!data.exists() || newData.val() === data.val())"
         },
         "createdAt": {
-          ".validate": "newData.isNumber()"
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())"
         },
         "updatedAt": {
           ".validate": "newData.isNumber()"
@@ -54,6 +54,27 @@
           ".validate": "newData.hasChildren([newData.parent().child('hostId').val()])",
           "$playerId": {
             ".validate": "newData.hasChildren(['id', 'name', 'joinedAt', 'lastSeenAt', 'reconnectCount', 'isHost']) && newData.child('id').val() === $playerId && newData.child('name').isString() && newData.child('name').val().matches(/^.{1,24}$/) && newData.child('joinedAt').isNumber() && newData.child('lastSeenAt').isNumber() && newData.child('reconnectCount').isNumber() && newData.child('reconnectCount').val() >= 0 && newData.child('reconnectCount').val() <= 100 && newData.child('isHost').isBoolean() && (!newData.child('rejoinedAt').exists() || newData.child('rejoinedAt').isNumber())",
+            "id": {
+              ".validate": "newData.isString() && newData.val() === $playerId && (!data.exists() || newData.val() === data.val())"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().matches(/^.{1,24}$/) && (!data.exists() || newData.val() === data.val())"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())"
+            },
+            "lastSeenAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "reconnectCount": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+            },
+            "rejoinedAt": {
+              ".validate": "!newData.exists() || newData.isNumber()"
+            },
+            "isHost": {
+              ".validate": "newData.isBoolean() && (!data.exists() ? newData.val() === ($playerId === newData.parent().parent().parent().child('hostId').val()) : newData.val() === data.val())"
+            },
             "$other": {
               ".validate": true
             }
@@ -62,7 +83,7 @@
         "seating": {
           ".validate": "newData.child('0').isString() && !newData.child('4').exists()",
           "$other": {
-            ".validate": "newData.isString()"
+            ".validate": "$other.matches(/^[0-3]$/) && newData.isString() && newData.parent().parent().child('players').child(newData.val()).exists()"
           }
         },
         "session": {

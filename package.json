@@ -2,6 +2,8 @@
   "name": "cuarenta",
   "private": true,
   "version": "0.2.0",
+  "description": "Four-player Cuarenta web app with Firebase-backed lobbies, reconnectable links, and drag-first move previews.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
