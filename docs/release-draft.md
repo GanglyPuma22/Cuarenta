@@ -1,37 +1,37 @@
-# Draft GitHub release notes
-
-## Cuarenta v0.2.0 — playable rewrite, reconnectable lobbies, lighter auth
+# Cuarenta v0.2.0 release notes
 
 Cuarenta is a pragmatic four-player web implementation of the Ecuadorian card game, built with React, Vite, and Firebase Realtime Database.
 
+Live app: <https://cuarenta-dfbf1.web.app/>
+
 ![Gameplay screenshot](assets/gameplay-screenshot.png)
 
-### Highlights
+## Highlights
 
-- full match flow to 40 with seating-based teams
-- reconnectable game links
+- full four-player match flow to 40 with seating-based teams
+- reconnectable game links for same-browser session recovery
 - drag-first move selection with clearer capture previews
-- in-app rules and scoring reference
-- emulator-first local setup
+- in-app rules and scoring reference for edge cases
+- emulator-first local setup for contributors
 - Firebase anonymous auth for lightweight player identity
 - tighter Realtime Database rules than the earlier open-write prototype
 
-### Why this release exists
+## Release focus
 
-This is the first version that feels honest enough to share as a repo:
+This release marks the first public-ready version of the current rewrite:
 
 - the game is real and playable
 - setup is explicit instead of silently pointing at a live backend
-- the trust model is better documented
-- the remaining rough edges are called out instead of hidden
+- the trust model is clearer and safer than the original prototype
+- the rough edges are called out directly instead of hidden behind launch copy
 
-### Known rough edges
+## Known rough edges
 
 - gameplay is still client-authoritative
 - anonymous auth improves the public-demo story, but it is not a full anti-abuse system
 - reconnect is same-browser, not general cross-device handoff
 - the remembered ronda-caída +10 bonus is still not implemented
 
-### Suggested release blurb
+## Short release blurb
 
-A small but real Cuarenta web app: four-player lobby, reconnectable links, better move previews, and now a lighter anonymous-auth path instead of a wide-open write surface. Still not pretending to be a hardened public game service.
+A small but real Cuarenta web app: four-player lobby, reconnectable links, better move previews, and a lightweight anonymous-auth path instead of a wide-open write surface. Playable today, still intentionally rough around public-service hardening.

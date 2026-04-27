@@ -28,9 +28,15 @@ If you want polished matchmaking, accounts, cosmetics, or anti-cheat hardening, 
 
 ## Current status
 
-This project is **playable and credibly open-sourceable soon**, but still **demo-grade infrastructure-wise**.
+This project is **playable today** and still intentionally **light on infrastructure hardening**.
 
-The UX and game flow are real. The backend trust model is improved, but not fully hardened for hostile internet traffic. The current posture is good for personal use, small-group sharing, and open-sourcing with honest caveats.
+The UX and game flow are real. The backend trust model is materially safer than the original wide-open prototype, but it is not hardened for hostile internet traffic. The current posture is a good fit for personal use, small-group sharing, and modest public demo use with honest caveats.
+
+## Play online
+
+Live app: <https://cuarenta-dfbf1.web.app/>
+
+Use the hosted version if you just want to play. Use the local setup below if you want to inspect or modify the project.
 
 ## What already works
 
@@ -55,12 +61,12 @@ Why it fits this project:
 - same-browser reconnect matters more than email/password login
 - the extra friction of real accounts is not justified for a casual four-player card game
 
-What changed in this pass:
+Current safeguards:
 
-- the app now signs each browser into Firebase anonymously before touching the database
-- local emulator setup now expects **Auth + Realtime Database** together
-- Realtime Database rules now require authenticated access instead of allowing open writes
-- lobby creation/joining is tied to the caller's anonymous Firebase uid
+- the app signs each browser into Firebase anonymously before touching the database
+- local emulator setup expects **Auth + Realtime Database** together
+- Realtime Database rules require authenticated access instead of allowing open writes
+- lobby creation and joining are tied to the caller's anonymous Firebase uid
 - only the **current turn player** is allowed to submit gameplay writes once a match is live
 
 What this still does **not** solve:
@@ -69,7 +75,7 @@ What this still does **not** solve:
 - a malicious current-turn player could still try to submit a forged but valid-looking game state
 - there is no server-side move validation, rate limiting, abuse review, or cleanup worker yet
 
-So: anonymous auth is enough for the repo's current use case **if the goal is lightweight participation with a materially safer public demo surface**. It is **not** the final answer if the goal becomes a truly hardened public game service.
+Anonymous auth is the right tradeoff for this project today: lightweight participation, same-browser reconnect, and a meaningfully safer demo surface than open writes. It is **not** the final answer if the goal becomes a truly hardened public game service.
 
 ## Safe local setup
 
@@ -145,7 +151,7 @@ set -a
 source .env.local
 set +a
 npm run build
-firebase deploy --only hosting,database
+npx firebase-tools@latest deploy --only hosting,database --project <your-project-id>
 ```
 
 If you deploy somewhere other than Firebase Hosting, serve `dist/` at the base path you built for and keep SPA rewrites enabled.
@@ -158,18 +164,6 @@ If you deploy somewhere other than Firebase Hosting, serve `dist/` at the base p
 - the remembered ronda-caída +10 bonus is still not implemented
 - the UI chooses clarity over theatrical animation
 - the app auto-previews and auto-takes the visible sequence instead of forcing players to remember it manually
-
-## OSS notes
-
-This repo now has the minimum credible public-facing surface for an eventual open-source release:
-
-- MIT license
-- safer default local setup via emulator-first docs
-- screenshot in-repo for README/release use
-- explicit auth/safety/limitations section
-- release-draft notes in `docs/release-draft.md`
-
-The remaining serious blocker for a truly public internet demo is still the lack of server-authoritative move enforcement.
 
 ## License
 
