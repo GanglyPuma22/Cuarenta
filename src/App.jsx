@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
+import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
 import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
@@ -732,6 +733,10 @@ export default function App() {
   }));
 
   const playerId = authState.playerId;
+  const realtimeAuthProbe = useMemo(
+    () => (db ? createRealtimeAuthProbe(db) : null),
+    [db]
+  );
   const canUseRealtime = hasFirebase && authState.status === 'ready';
   const gameRef = useMemo(
     () => (gameCode && canUseRealtime ? ref(db, `games/${gameCode}`) : null),
@@ -790,6 +795,7 @@ export default function App() {
 
     let active = true;
     let signInPromise = null;
+    let authSyncAttempt = 0;
 
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -797,7 +803,20 @@ export default function App() {
         if (!active) return;
 
         if (user) {
-          setAuthState({ status: 'ready', playerId: user.uid, error: '' });
+          const attemptId = ++authSyncAttempt;
+          setAuthState({ status: 'authorizing-db', playerId: '', error: '' });
+          try {
+            await waitForRealtimeAuth({ user, probe: realtimeAuthProbe });
+            if (!active || attemptId !== authSyncAttempt) return;
+            setAuthState({ status: 'ready', playerId: user.uid, error: '' });
+          } catch (authError) {
+            if (!active || attemptId !== authSyncAttempt) return;
+            setAuthState({
+              status: 'error',
+              playerId: '',
+              error: authError.message || 'Anonymous sign-in failed.',
+            });
+          }
           return;
         }
 
@@ -832,7 +851,7 @@ export default function App() {
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [realtimeAuthProbe]);
 
   useEffect(() => {
     syncGameUrl(gameCode);
@@ -1164,13 +1183,13 @@ export default function App() {
 
       {authPending ? (
         <section className="notice-card">
-          Signing this browser into Firebase anonymously… no email, password, or profile setup required.
+          Preparing the anonymous Firebase session for this browser… one short auth/database handshake and then you can host or join.
         </section>
       ) : null}
 
       {authFailed ? (
         <section className="notice-card">
-          Anonymous Firebase sign-in failed. {authState.error || 'Enable Anonymous Auth for the project or start the Auth emulator for local work.'}
+          Firebase session setup failed. {authState.error || 'Enable Anonymous Auth for the project or start the Auth emulator for local work.'}
         </section>
       ) : null}
 
