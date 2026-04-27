@@ -1,6 +1,6 @@
 import { get, ref } from 'firebase/database';
 
-export const AUTH_PROBE_GAME_CODE = 'AAAAAA';
+export const AUTH_PROBE_GAME_CODE = '__auth_probe__';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
