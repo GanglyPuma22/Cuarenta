@@ -447,6 +447,11 @@ button:focus-visible {
   border-style: dashed;
 }
 
+.lobby-seat.computer {
+  border-color: rgba(36, 91, 67, 0.3);
+  background: linear-gradient(180deg, rgba(239, 248, 242, 0.96) 0%, var(--surface) 100%);
+}
+
 .avatar-orb {
   width: 56px;
   height: 56px;
@@ -1525,6 +1530,31 @@ button:focus-visible {
 
   .invite-copy h1 {
     font-size: 46px;
+  }
+
+  .lobby-actions,
+  .primary-button.wide {
+    width: 100%;
+  }
+
+  .primary-button.wide {
+    min-width: 0;
+  }
+
+  .lobby-footnote {
+    max-width: 320px;
+    text-align: center;
+    line-height: 1.45;
+  }
+
+  .lobby-seat {
+    padding: 14px;
+  }
+
+  .avatar-orb {
+    width: 46px;
+    height: 46px;
+    border-radius: 16px;
   }
 
   .board-shell {
