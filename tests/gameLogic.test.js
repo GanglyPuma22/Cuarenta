@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -252,6 +252,18 @@ test('computer move selection prefers points, then captures, then a stable move 
     hostHand: [card('7', '♠', 'h7'), card('5', '♠', 'h5')],
   });
   assert.equal(selectComputerMove(tieGame, 'p1').playedCardId, 'h5');
+});
+
+test('computer turns are inactive after a game finishes', () => {
+  const activeGame = buildGame({ hostHand: [card('5', '♠', 'h5')] });
+  activeGame.players.p1.isComputer = true;
+
+  assert.equal(isComputerTurnActive(activeGame), true);
+  assert.equal(isComputerTurnActive({
+    ...activeGame,
+    status: 'finished',
+    round: { ...activeGame.round, status: 'finished' },
+  }), false);
 });
 
 

@@ -429,6 +429,16 @@ export function selectComputerMove(game, playerId) {
   return candidates[0]?.move || null;
 }
 
+export function isComputerTurnActive(game) {
+  const playerId = game?.round?.turnPlayerId;
+  return Boolean(
+    game?.status === 'playing'
+    && game?.round?.status !== 'finished'
+    && playerId
+    && game.players?.[playerId]?.isComputer
+  );
+}
+
 function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };

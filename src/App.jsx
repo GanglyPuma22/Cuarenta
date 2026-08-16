@@ -4,7 +4,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, isComputerTurnActive, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const REFERENCE_PANELS = {
@@ -961,9 +961,7 @@ export default function App() {
     : null;
 
   useEffect(() => {
-    const computerPlayerId = game?.round?.turnPlayerId;
-    const computerPlayer = computerPlayerId ? game?.players?.[computerPlayerId] : null;
-    if (!isHost || !computerPlayer?.isComputer || !gameRef || !playerId) return undefined;
+    if (!isHost || !isComputerTurnActive(game) || !gameRef || !playerId) return undefined;
 
     const timer = window.setTimeout(() => {
       runTransaction(gameRef, (current) => {
