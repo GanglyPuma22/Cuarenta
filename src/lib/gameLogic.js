@@ -3,6 +3,7 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', 'J', 'Q', 'K'];
 const NUMERIC_RANKS = new Set(['A', '2', '3', '4', '5', '6', '7']);
 const RANK_TO_VALUE = { A: 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, J: 8, Q: 9, K: 10 };
 const TEAM_IDS = ['A', 'B'];
+const PLAYER_COUNT = 4;
 
 export function rankValue(rank) {
   return RANK_TO_VALUE[rank];
@@ -213,6 +214,29 @@ function buildRound(players, dealerIndex, scores, handNumber = 1) {
   return round;
 }
 
+function fillComputerSeats(game, now) {
+  const players = { ...game.players };
+  const seating = [...game.seating];
+  let computerNumber = 1;
+
+  while (seating.length < PLAYER_COUNT) {
+    const id = `computer_${computerNumber++}`;
+    if (players[id]) continue;
+    players[id] = {
+      id,
+      name: `Computer ${computerNumber - 1}`,
+      joinedAt: now,
+      lastSeenAt: now,
+      reconnectCount: 0,
+      isHost: false,
+      isComputer: true,
+    };
+    seating.push(id);
+  }
+
+  return { players, seating };
+}
+
 function applyDealAnnouncements(round, dealNumber, players) {
   const dealHands = round.perDealHands[dealNumber];
   for (const player of players) {
@@ -238,12 +262,14 @@ function applyDealAnnouncements(round, dealNumber, players) {
 }
 
 export function startMatchFromLobby(game) {
-  const players = game.seating.map((playerId) => game.players[playerId]);
+  const now = Date.now();
+  const completedLobby = fillComputerSeats(game, now);
+  const players = completedLobby.seating.map((playerId) => completedLobby.players[playerId]);
   const dealerIndex = Math.floor(Math.random() * players.length);
   const round = buildRound(players, dealerIndex, { A: 0, B: 0 }, 1);
-  const now = Date.now();
   const nextGame = {
     ...game,
+    players: completedLobby.players,
     status: round.status === 'finished' ? 'finished' : 'playing',
     startedAt: now,
     finishedAt: round.status === 'finished' ? now : null,
@@ -378,6 +404,39 @@ export function analyzeMove(game, playerId, move) {
     isLimpia,
     bonusPoints: (isCaida ? 2 : 0) + (isLimpia ? 2 : 0),
   };
+}
+
+function computerMoveKey(move) {
+  return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
+}
+
+export function selectComputerMove(game, playerId) {
+  const candidates = getLegalMoves(game?.round, playerId).map((move) => ({
+    move,
+    analysis: analyzeMove(game, playerId, move),
+  }));
+
+  candidates.sort((left, right) => {
+    if (right.analysis.bonusPoints !== left.analysis.bonusPoints) {
+      return right.analysis.bonusPoints - left.analysis.bonusPoints;
+    }
+    if (right.analysis.captureCount !== left.analysis.captureCount) {
+      return right.analysis.captureCount - left.analysis.captureCount;
+    }
+    return computerMoveKey(left.move).localeCompare(computerMoveKey(right.move));
+  });
+
+  return candidates[0]?.move || null;
+}
+
+export function isComputerTurnActive(game) {
+  const playerId = game?.round?.turnPlayerId;
+  return Boolean(
+    game?.status === 'playing'
+    && game?.round?.status !== 'finished'
+    && playerId
+    && game.players?.[playerId]?.isComputer
+  );
 }
 
 function finalizeHand(game, lastActorId) {

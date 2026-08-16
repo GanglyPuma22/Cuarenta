@@ -4,7 +4,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, isComputerTurnActive, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const REFERENCE_PANELS = {
@@ -46,6 +46,7 @@ function cardSuitClass(card) {
 
 function playerLabel(index, currentPlayerId, seatPlayer, round, game) {
   if (!seatPlayer) return `Player ${index + 1}`;
+  if (seatPlayer.isComputer) return `Computer (P${index + 1})`;
   if (seatPlayer.id === currentPlayerId) return `You (P${index + 1})`;
   if (!round || !game) return `Player ${index + 1}`;
   const yourSeat = game.seating.indexOf(currentPlayerId) + 1;
@@ -282,11 +283,11 @@ function ReferenceDrawer({ tab, onRequestClose, onTabChange }) {
 
 function LobbySeat({ player, isCurrent, slot }) {
   return (
-    <div className={`lobby-seat ${player ? 'filled' : 'empty'} ${isCurrent ? 'current' : ''}`}>
+    <div className={`lobby-seat ${player ? 'filled' : 'empty'} ${player?.isComputer ? 'computer' : ''} ${isCurrent ? 'current' : ''}`}>
       <div className="avatar-orb">{player ? (player.name || '?').slice(0, 1).toUpperCase() : '+'}</div>
       <div className="seat-copy">
         <div className="seat-name">{player?.name || `Player ${slot}`}</div>
-        <div className="seat-status">{player ? (isCurrent ? 'Ready to play' : 'Waiting in lobby') : 'Waiting for players...'}</div>
+        <div className="seat-status">{player ? (player.isComputer ? 'Computer player' : (isCurrent ? 'Ready to play' : 'Waiting in lobby')) : 'Computer will fill this seat at start'}</div>
       </div>
       {player?.isHost ? <div className="host-badge">Host</div> : null}
     </div>
@@ -371,6 +372,7 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   const liveLimpia = captureMoves.some((move) => moveOutcomes[moveKey(move)]?.isLimpia);
   const lastPlayedCard = lastPlayedCardId ? boardCardsById[lastPlayedCardId] : null;
   const currentTurnName = game.players?.[round.turnPlayerId]?.name || 'the table';
+  const isComputerTurn = Boolean(game.players?.[round.turnPlayerId]?.isComputer);
 
   let headline = `Waiting on ${currentTurnName}.`;
   let body = 'Read the felt, count what is gone, and hold back the answer card.';
@@ -384,6 +386,11 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
     } else {
       body = `${captureMoves.length} capture lines are live. Preview, then hit the cleanest one.`;
     }
+  }
+
+  if (isComputerTurn) {
+    headline = `${currentTurnName} is choosing a move.`;
+    body = 'The computer prioritizes immediate points, then the largest capture.';
   }
 
   return (
@@ -954,6 +961,23 @@ export default function App() {
     : null;
 
   useEffect(() => {
+    if (!isHost || !isComputerTurnActive(game) || !gameRef || !playerId) return undefined;
+
+    const timer = window.setTimeout(() => {
+      runTransaction(gameRef, (current) => {
+        const activeComputerId = current?.round?.turnPlayerId;
+        if (!current || current.hostId !== playerId || !current.players?.[activeComputerId]?.isComputer) return current;
+        const move = selectComputerMove(current, activeComputerId);
+        return move ? applyMove(current, activeComputerId, move) : current;
+      }, { applyLocally: false }).catch((transactionError) => {
+        setError(transactionError.message || 'Could not play the computer move.');
+      });
+    }, 650);
+
+    return () => window.clearTimeout(timer);
+  }, [game?.players, game?.round?.turnPlayerId, gameRef, isHost, playerId]);
+
+  useEffect(() => {
     if (!visibleHand.some((card) => card.id === selectedCardId)) {
       setSelectedCardId(visibleHand[0]?.id || '');
     }
@@ -1064,13 +1088,13 @@ export default function App() {
     if (!hasFirebase) return setError(firebaseConfigError || 'Firebase is not configured for this build.');
     if (!playerId) return setError(authState.error || 'Still establishing the anonymous Firebase session. Try again in a second.');
     if (!game || game.hostId !== playerId) return;
-    if ((game.seating || []).length !== 4) return setError('Need exactly 4 players.');
+    if (!(game.seating || []).length) return setError('Need at least one player.');
     setBusy(true);
     setError('');
     await runTransaction(gameRef, (current) => {
       if (!current) return current;
       if (current.hostId !== playerId) throw new Error('Only host can start.');
-      if ((current.seating || []).length !== 4) throw new Error('Need exactly 4 players.');
+      if (!(current.seating || []).length) throw new Error('Need at least one player.');
       return startMatchFromLobby(current);
     }, { applyLocally: false }).catch((transactionError) => setError(transactionError.message || 'Could not start game.'));
     setBusy(false);
@@ -1219,8 +1243,8 @@ export default function App() {
             </section>
           ) : (
             <div className="lobby-actions">
-              {isHost ? <button className="primary-button wide" disabled={busy || !canUseRealtime || (game.seating || []).length !== 4} onClick={startGame}>Start game</button> : null}
-              <div className="lobby-footnote">Requires 4 players to begin</div>
+              {isHost ? <button className="primary-button wide" disabled={busy || !canUseRealtime || !(game.seating || []).length} onClick={startGame}>Start with computer players</button> : null}
+              <div className="lobby-footnote">Empty seats become computer players when the host starts</div>
             </div>
           )}
         </section>

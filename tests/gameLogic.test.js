@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, rankValue, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -206,6 +206,64 @@ test('opening dealer is randomized among seated players', () => {
 
   assert.ok(seen.size > 1, 'dealer index should not always be fixed');
   assert.ok([...seen].every((value) => value >= 0 && value < 4));
+});
+
+test('starting a partial lobby fills the remaining seats with computer players', () => {
+  const game = {
+    seating: ['p1', 'p2'],
+    players: {
+      p1: { id: 'p1', name: 'Ana', isHost: true },
+      p2: { id: 'p2', name: 'Beto', isHost: false },
+    },
+    hostId: 'p1',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    lastActivityAt: Date.now(),
+    status: 'lobby',
+    scores: { A: 0, B: 0 },
+    lobbyMessage: 'Waiting for players',
+  };
+
+  const started = startMatchFromLobby(game);
+  const computerIds = started.seating.filter((id) => started.players[id].isComputer);
+
+  assert.equal(started.seating.length, 4);
+  assert.deepEqual(computerIds, ['computer_1', 'computer_2']);
+  assert.deepEqual(computerIds.map((id) => started.players[id].name), ['Computer 1', 'Computer 2']);
+});
+
+test('computer move selection prefers points, then captures, then a stable move key', () => {
+  const scoreGame = buildGame({
+    scoreA: 36,
+    board: [card('5', '♥', 'b5')],
+    hostHand: [card('5', '♠', 'h5'), card('Q', '♠', 'hq')],
+    lastPlayedCard: { cardId: 'b5', rank: '5', playerId: 'p4', turnNumber: 1, dealNumber: 1 },
+  });
+  assert.equal(selectComputerMove(scoreGame, 'p1').playedCardId, 'h5');
+
+  const captureGame = buildGame({
+    board: [card('2', '♣', 'b2'), card('3', '♦', 'b3'), card('5', '♥', 'b5'), card('6', '♠', 'b6'), card('7', '♦', 'b7')],
+    hostHand: [card('5', '♠', 'h5')],
+  });
+  assert.equal(selectComputerMove(captureGame, 'p1').type, 'add');
+
+  const tieGame = buildGame({
+    board: [],
+    hostHand: [card('7', '♠', 'h7'), card('5', '♠', 'h5')],
+  });
+  assert.equal(selectComputerMove(tieGame, 'p1').playedCardId, 'h5');
+});
+
+test('computer turns are inactive after a game finishes', () => {
+  const activeGame = buildGame({ hostHand: [card('5', '♠', 'h5')] });
+  activeGame.players.p1.isComputer = true;
+
+  assert.equal(isComputerTurnActive(activeGame), true);
+  assert.equal(isComputerTurnActive({
+    ...activeGame,
+    status: 'finished',
+    round: { ...activeGame.round, status: 'finished' },
+  }), false);
 });
 
 
