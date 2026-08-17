@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { analyzeMove, applyMove, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { describeRoundTransition, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -383,4 +384,80 @@ test('analyzeMove stays aligned with applied scoring bonuses', () => {
   assert.equal(analysis.bonusPoints, next.scores.A - game.scores.A);
   assert.equal(analysis.isCaida, true);
   assert.equal(analysis.isLimpia, true);
+});
+
+function outcome(overrides = {}) {
+  return {
+    move: { type: 'match' },
+    captureCount: 1,
+    sequenceCount: 0,
+    isCaida: false,
+    isLimpia: false,
+    bonusPoints: 0,
+    ...overrides,
+  };
+}
+
+test('resolved move feedback maps an analysed outcome to an animation kind', () => {
+  assert.equal(resolveMoveFeedback(null), null);
+  assert.equal(resolveMoveFeedback(outcome({ move: null })), null);
+
+  assert.equal(resolveMoveFeedback(outcome({ move: { type: 'trail' }, captureCount: 0 })).kind, 'trail');
+  assert.equal(resolveMoveFeedback(outcome()).kind, 'capture');
+  assert.equal(resolveMoveFeedback(outcome({ captureCount: 3, sequenceCount: 2 })).kind, 'sequence');
+  assert.equal(resolveMoveFeedback(outcome({ isCaida: true, bonusPoints: 2 })).kind, 'caida');
+  assert.equal(resolveMoveFeedback(outcome({ isLimpia: true, bonusPoints: 2 })).kind, 'limpia');
+
+  const stacked = resolveMoveFeedback(outcome({ isCaida: true, isLimpia: true, bonusPoints: 4 }));
+  assert.equal(stacked.kind, 'caida-limpia');
+  assert.equal(stacked.title, 'CAÍDA Y LIMPIA');
+  assert.equal(stacked.points, 4);
+  assert.equal(stacked.isSpecial, true);
+  assert.equal(resolveMoveFeedback(outcome({ captureCount: 3, sequenceCount: 2 })).isSpecial, false);
+});
+
+test('resolved move feedback reads a committed round transition', () => {
+  const previous = buildCaidaBoardGame();
+  const caidaMove = getDisplayedMoves(previous, 'p1')[0].move;
+  const next = applyMove(previous, 'p1', caidaMove);
+  const transition = describeRoundTransition(previous, next);
+
+  assert.equal(transition.playerId, 'p1');
+  assert.equal(transition.teamId, 'A');
+  assert.equal(transition.playedCard.id, 'h5');
+  assert.deepEqual(transition.capturedCards.map((entry) => entry.id), ['b5_last', 'b6', 'b7']);
+  assert.equal(transition.outcome.isCaida, true);
+  assert.equal(transition.outcome.isLimpia, false);
+  assert.equal(transition.outcome.captureCount, 3);
+  assert.equal(transition.outcome.sequenceCount, 2);
+  assert.equal(resolveMoveFeedback(transition.outcome).kind, 'caida');
+
+  const stackedPrevious = buildGame({
+    scoreA: 36,
+    board: [card('5', '♥', 'b5')],
+    hostHand: [card('5', '♠', 'h5')],
+    lastPlayedCard: { cardId: 'b5', rank: '5', playerId: 'p4', turnNumber: 1, dealNumber: 1 },
+  });
+  const stackedMove = getDisplayedMoves(stackedPrevious, 'p1')[0].move;
+  const stacked = describeRoundTransition(stackedPrevious, applyMove(stackedPrevious, 'p1', stackedMove));
+  assert.equal(resolveMoveFeedback(stacked.outcome).kind, 'caida-limpia');
+  assert.equal(stacked.outcome.bonusPoints, 4);
+});
+
+test('resolved move feedback covers trails and gives up on unusable transitions', () => {
+  const previous = buildGame({ board: [], hostHand: [card('K', '♠', 'hk')] });
+  const trailMove = getLegalMoves(previous.round, 'p1').find((move) => move.type === 'trail');
+  const transition = describeRoundTransition(previous, applyMove(previous, 'p1', trailMove));
+
+  assert.equal(transition.playedCard.id, 'hk');
+  assert.deepEqual(transition.capturedCards, []);
+  assert.equal(resolveMoveFeedback(transition.outcome).kind, 'trail');
+
+  assert.equal(describeRoundTransition(previous, previous), null, 'an unchanged state animates nothing');
+  assert.equal(describeRoundTransition(null, previous), null);
+  assert.equal(
+    describeRoundTransition(previous, { ...previous, round: { ...previous.round, handNumber: 2 } }),
+    null,
+    'a freshly dealt hand renders immediately instead of animating'
+  );
 });

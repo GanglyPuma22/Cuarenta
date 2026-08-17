@@ -5,7 +5,10 @@ import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
 import { applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { describeRoundTransition, resolveMoveFeedback } from './lib/moveFeedback';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
+
+const FEEDBACK_HOLD_MS = { standard: 1400, special: 2600 };
 
 const REFERENCE_PANELS = {
   rules: {
@@ -162,6 +165,53 @@ function describeMove(move, boardCardsById, outcome) {
     return `Add ${setText}, then keep collecting upward through ${cardText(highest)}.`;
   }
   return `Add ${setText} exactly and take the set.`;
+}
+
+function announceFeedback(feedback) {
+  if (!feedback) return '';
+  const { playerName, playedCard, capturedCards } = feedback.transition;
+  const who = playerName || 'A player';
+
+  if (feedback.kind === 'trail') return `${who} trailed ${cardText(playedCard)}.`;
+
+  const taken = capturedCards.map(cardText).join(', ');
+  const bonus = feedback.points ? ` ${feedback.title} for ${feedback.points} points.` : '';
+  return `${who} played ${cardText(playedCard)} and captured ${taken}.${bonus}`;
+}
+
+function MoveFeedbackLayer({ feedback }) {
+  if (!feedback) return null;
+  const { playedCard, capturedCards, teamId } = feedback.transition;
+
+  return (
+    <div
+      key={feedback.id}
+      className={`move-flight kind-${feedback.kind} team-${teamId || 'A'}`}
+      aria-hidden="true"
+    >
+      <div className="flight-cards">
+        <span className={`flight-card is-played ${cardSuitClass(playedCard)}`}>{cardText(playedCard)}</span>
+        {capturedCards.map((card, index) => (
+          <span
+            key={card.id}
+            className={`flight-card is-captured ${cardSuitClass(card)}`}
+            style={{ '--flight-index': index }}
+          >
+            {cardText(card)}
+          </span>
+        ))}
+      </div>
+      {capturedCards.length ? (
+        <div className="flight-pile">Team {teamId} +{capturedCards.length + 1}</div>
+      ) : null}
+      {feedback.isSpecial ? (
+        <div className={`outcome-overlay kind-${feedback.kind}`}>
+          <div className="outcome-title">{feedback.title}</div>
+          <div className="outcome-points">+{feedback.points}</div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function stampSessionMetadata(target, { now = Date.now(), action, actorId }) {
@@ -406,7 +456,7 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById }) {
+function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById, feedback }) {
   const safeCards = Array.isArray(cards) ? cards : [];
   const highlighted = new Set(highlightedCaptureIds || []);
   const targets = new Set(highlightedTargetIds || []);
@@ -416,7 +466,8 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
   const sequenceIds = new Set((previewedMove?.captureIds || []).filter((id) => !targets.has(id)));
 
   return (
-    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass}`}>
+    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass} ${feedback ? `is-resolving kind-${feedback.kind}` : ''}`}>
+      <MoveFeedbackLayer feedback={feedback} />
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
@@ -751,6 +802,9 @@ export default function App() {
   const [dragCardId, setDragCardId] = useState('');
   const [previewMoveKey, setPreviewMoveKey] = useState('');
   const [referenceTab, setReferenceTab] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  const previousGameRef = useRef(null);
+  const feedbackCounterRef = useRef(0);
   const [authState, setAuthState] = useState(() => ({
     status: hasFirebase ? 'loading' : 'unconfigured',
     playerId: '',
@@ -1000,6 +1054,32 @@ export default function App() {
 
     return () => window.clearTimeout(timer);
   }, [game?.players, game?.round?.turnPlayerId, gameRef, isHost, playerId]);
+
+  // The board always renders the authoritative state. The feedback layer is a
+  // transient overlay derived from the transition, so a missing transition costs
+  // an animation, never a turn.
+  useEffect(() => {
+    const previous = previousGameRef.current;
+    previousGameRef.current = game;
+    if (!previous?.round || !game?.round) return;
+
+    const transition = describeRoundTransition(previous, game);
+    const resolved = transition ? resolveMoveFeedback(transition.outcome) : null;
+    if (!resolved) return;
+
+    feedbackCounterRef.current += 1;
+    setFeedback({ ...resolved, id: feedbackCounterRef.current, transition });
+  }, [game]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const hold = feedback.isSpecial ? FEEDBACK_HOLD_MS.special : FEEDBACK_HOLD_MS.standard;
+    const timer = window.setTimeout(
+      () => setFeedback((current) => (current?.id === feedback.id ? null : current)),
+      hold
+    );
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
 
   useEffect(() => {
     if (!visibleHand.some((card) => card.id === selectedCardId)) {
@@ -1275,6 +1355,10 @@ export default function App() {
         </section>
       ) : null}
 
+      <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {announceFeedback(feedback)}
+      </div>
+
       {game && round && isParticipant ? (
         <section className="game-layout">
           <aside className="sidebar-column">
@@ -1311,6 +1395,7 @@ export default function App() {
               previewCopy={previewCopy}
               previewLabel={previewAction?.label || ''}
               boardCardsById={boardCardsById}
+              feedback={feedback}
             />
             <MovePicker
               hand={visibleHand}
