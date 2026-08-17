@@ -206,11 +206,7 @@ function MoveFeedbackLayer({ feedback }) {
   const { playedCard, capturedCards, teamId } = feedback.transition;
 
   return (
-    <div
-      key={feedback.id}
-      className={`move-flight kind-${feedback.kind} team-${teamId || 'A'}`}
-      aria-hidden="true"
-    >
+    <div className={`move-flight kind-${feedback.kind} team-${teamId || 'A'}`} aria-hidden="true">
       <div className="flight-cards">
         <span className={`flight-card is-played ${cardSuitClass(playedCard)}`}>{cardText(playedCard)}</span>
         {capturedCards.map((card, index) => (
@@ -489,7 +485,8 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
 
   return (
     <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass} ${feedback ? `is-resolving kind-${feedback.kind}` : ''}`}>
-      <MoveFeedbackLayer feedback={feedback} />
+      {/* Remounting per outcome restarts the CSS animations for back-to-back moves. */}
+      <MoveFeedbackLayer key={feedback?.id || 'idle'} feedback={feedback} />
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
@@ -783,6 +780,36 @@ function RecentCallsPanel({ round }) {
   );
 }
 
+// Compact layouts fold the side columns behind a Details control so the felt,
+// the selected card, and the live actions stay on one screen. Desktop keeps the
+// panels rendered inline exactly as before.
+function useCompactLayout() {
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const query = window.matchMedia('(max-width: 860px)');
+    const sync = (event) => setIsCompact(event.matches);
+    sync(query);
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return isCompact;
+}
+
+function SidePanels({ compact, summary, children }) {
+  if (!compact) return <>{children}</>;
+
+  return (
+    <details className="panel-drawer">
+      <summary className="panel-drawer-summary">{summary}</summary>
+      <div className="panel-drawer-body">{children}</div>
+    </details>
+  );
+}
+
 function ReconnectDock({ game, onCopyShareLink, linkCopied }) {
   return (
     <details className="reconnect-dock">
@@ -835,6 +862,7 @@ export default function App() {
     error: '',
   }));
 
+  const isCompactLayout = useCompactLayout();
   const playerId = authState.playerId;
   const realtimeAuthProbe = useMemo(
     () => (db ? createRealtimeAuthProbe(db) : null),
@@ -1425,8 +1453,10 @@ export default function App() {
       {game && round && isParticipant ? (
         <section className="game-layout">
           <aside className="sidebar-column">
-            <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
-            <MatchStatePanel game={game} currentPlayerId={playerId} />
+            <SidePanels compact={isCompactLayout} summary="Details · seat and score">
+              <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
+              <MatchStatePanel game={game} currentPlayerId={playerId} />
+            </SidePanels>
           </aside>
           <section className="center-column">
             <TurnBanner
@@ -1476,8 +1506,10 @@ export default function App() {
             {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
           </section>
           <aside className="activity-column">
-            <TurnOrderPanel game={game} currentPlayerId={playerId} />
-            <RecentCallsPanel round={round} />
+            <SidePanels compact={isCompactLayout} summary="Details · turn order and calls">
+              <TurnOrderPanel game={game} currentPlayerId={playerId} />
+              <RecentCallsPanel round={round} />
+            </SidePanels>
           </aside>
         </section>
       ) : null}
