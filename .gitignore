@@ -2,6 +2,7 @@ node_modules
 dist
 build
 .firebase
+.firecrawl/
 .env
 .env.*
 !.env.example
