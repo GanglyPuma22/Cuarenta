@@ -406,6 +406,28 @@ export function analyzeMove(game, playerId, move) {
   };
 }
 
+// Presentation-only. The engine keeps offering every legal move; this list just
+// decides what a human should be shown so a live caída cannot be mistaken for an
+// ordinary same-rank match.
+export function getDisplayedMoves(game, playerId, moves) {
+  const source = Array.isArray(moves) ? moves : getLegalMoves(game?.round, playerId);
+  const actions = source.map((move) => ({
+    move,
+    analysis: analyzeMove(game, playerId, move),
+  }));
+  const caidaCardIds = new Set(
+    actions.filter((action) => action.analysis.isCaida).map((action) => action.move.playedCardId)
+  );
+
+  return actions
+    .filter((action) => {
+      if (!caidaCardIds.has(action.move.playedCardId)) return true;
+      if (action.analysis.isCaida) return true;
+      return action.move.type !== 'match' && action.move.type !== 'trail';
+    })
+    .sort((left, right) => Number(right.analysis.isCaida) - Number(left.analysis.isCaida));
+}
+
 function computerMoveKey(move) {
   return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
 }

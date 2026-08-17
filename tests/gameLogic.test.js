@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getDealerPlayerId, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -266,6 +266,59 @@ test('computer turns are inactive after a game finishes', () => {
   }), false);
 });
 
+
+function buildCaidaBoardGame() {
+  const five = card('5', '♠', 'h5');
+  const board = [
+    card('2', '♣', 'b2'),
+    card('3', '♦', 'b3'),
+    card('5', '♥', 'b5_last'),
+    card('5', '♦', 'b5_other'),
+    card('6', '♠', 'b6'),
+    card('7', '♦', 'b7'),
+  ];
+
+  return buildGame({
+    board,
+    hostHand: [five],
+    lastPlayedCard: {
+      cardId: 'b5_last',
+      rank: '5',
+      playerId: 'p4',
+      turnNumber: 1,
+      dealNumber: 1,
+    },
+  });
+}
+
+test('caída display actions drop the ambiguous match and the trail for that card', () => {
+  const game = buildCaidaBoardGame();
+
+  const legalMoves = getLegalMoves(game.round, 'p1');
+  const displayed = getDisplayedMoves(game, 'p1', legalMoves);
+
+  assert.equal(legalMoves.filter((move) => move.type === 'match').length, 2, 'engine still offers both same-rank matches');
+  assert.ok(legalMoves.some((move) => move.type === 'trail'), 'engine still offers the trail');
+
+  const caida = displayed.filter((action) => action.analysis.isCaida);
+  assert.equal(caida.length, 1, 'exactly one caída action is displayed');
+  assert.deepEqual(caida[0].move.captureIds, ['b5_last', 'b6', 'b7'], 'the caída keeps its full upward sequence');
+
+  assert.equal(
+    displayed.filter((action) => action.move.type === 'match' && !action.analysis.isCaida).length,
+    0,
+    'the ambiguous same-rank match is hidden while a caída is live'
+  );
+  assert.equal(
+    displayed.filter((action) => action.move.type === 'trail' && action.move.playedCardId === 'h5').length,
+    0,
+    'the trail for that card is hidden while a caída is live'
+  );
+
+  const additions = displayed.filter((action) => action.move.type === 'add');
+  assert.equal(additions.length, 1, 'the non-matching addition capture stays available');
+  assert.deepEqual(additions[0].move.captureIds, ['b2', 'b3', 'b6', 'b7']);
+});
 
 test('analyzeMove stays aligned with applied scoring bonuses', () => {
   const five = card('5', '♠', 'h5');
