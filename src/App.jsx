@@ -5,7 +5,7 @@ import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
 import { applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
-import { describeRoundTransition, resolveMoveFeedback } from './lib/moveFeedback';
+import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from './lib/moveFeedback';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const FEEDBACK_HOLD_MS = { standard: 1400, special: 2600 };
@@ -165,6 +165,28 @@ function describeMove(move, boardCardsById, outcome) {
     return `Add ${setText}, then keep collecting upward through ${cardText(highest)}.`;
   }
   return `Add ${setText} exactly and take the set.`;
+}
+
+// Cues are synthesized so the build ships no audio assets. Nothing is created
+// until the player deliberately turns sound on, which also supplies the gesture
+// browsers require before an AudioContext may start.
+function playAudioCue(context, cue) {
+  if (!context || !cue || context.state === 'closed') return;
+
+  let startAt = context.currentTime + 0.02;
+  for (const tone of cue.tones) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(tone.frequency, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(cue.gain, startAt + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + tone.duration);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + tone.duration + 0.04);
+    startAt += tone.duration;
+  }
 }
 
 function announceFeedback(feedback) {
@@ -803,8 +825,10 @@ export default function App() {
   const [previewMoveKey, setPreviewMoveKey] = useState('');
   const [referenceTab, setReferenceTab] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const previousGameRef = useRef(null);
   const feedbackCounterRef = useRef(0);
+  const audioContextRef = useRef(null);
   const [authState, setAuthState] = useState(() => ({
     status: hasFirebase ? 'loading' : 'unconfigured',
     playerId: '',
@@ -1071,6 +1095,35 @@ export default function App() {
     setFeedback({ ...resolved, id: feedbackCounterRef.current, transition });
   }, [game]);
 
+  function toggleSound() {
+    if (soundEnabled) {
+      setSoundEnabled(false);
+      return;
+    }
+
+    try {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContextCtor();
+      }
+      audioContextRef.current.resume?.();
+      setSoundEnabled(true);
+    } catch {
+      setError('This browser blocked the audio cues. The visual feedback still runs.');
+    }
+  }
+
+  useEffect(() => () => {
+    audioContextRef.current?.close?.();
+    audioContextRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!soundEnabled || !feedback) return;
+    playAudioCue(audioContextRef.current, getFeedbackAudioCue(feedback.kind));
+  }, [feedback, soundEnabled]);
+
   useEffect(() => {
     if (!feedback) return undefined;
     const hold = feedback.isSpecial ? FEEDBACK_HOLD_MS.special : FEEDBACK_HOLD_MS.standard;
@@ -1254,6 +1307,16 @@ export default function App() {
           </nav>
         </div>
         <div className="topbar-actions">
+          {showGameChrome ? (
+            <button
+              type="button"
+              className={`secondary-chip sound-toggle ${soundEnabled ? 'is-on' : ''}`}
+              aria-pressed={soundEnabled}
+              onClick={toggleSound}
+            >
+              {soundEnabled ? 'Sound on' : 'Sound off'}
+            </button>
+          ) : null}
           {showGameChrome ? <button type="button" className="secondary-chip" onClick={returnHome}>Home</button> : null}
           {showGameChrome ? <GameCode code={gameCode} /> : null}
           {game && round && isParticipant ? <ReconnectDock game={game} onCopyShareLink={copyShareLink} linkCopied={linkCopied} /> : null}

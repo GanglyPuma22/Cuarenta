@@ -210,6 +210,12 @@ button:disabled {
   color: var(--primary-deep);
 }
 
+.sound-toggle.is-on {
+  background: rgba(36, 91, 67, 0.14);
+  border-color: rgba(36, 91, 67, 0.24);
+  color: var(--good);
+}
+
 .reference-overlay {
   position: fixed;
   inset: 0;
@@ -1842,5 +1848,44 @@ button:focus-visible {
 
   .utility-row {
     display: grid;
+  }
+}
+
+/* Reduced motion keeps every outcome label, badge, and highlight. Only the
+   travel and pop are removed. */
+@media (prefers-reduced-motion: reduce) {
+  .flight-card,
+  .flight-pile,
+  .outcome-overlay {
+    animation: none;
+  }
+
+  .flight-card.is-captured,
+  .flight-card.is-played {
+    opacity: 1;
+    transform: none;
+  }
+
+  .flight-pile {
+    opacity: 1;
+  }
+
+  .outcome-overlay {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+
+  .board-shell,
+  .move-option,
+  .stitch-card,
+  .hand-card,
+  .board-card {
+    transition: none;
+  }
+
+  .move-option.previewed,
+  .move-option.drop-ready,
+  .hand-card.selected {
+    transform: none;
   }
 }

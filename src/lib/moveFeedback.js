@@ -35,6 +35,40 @@ export function resolveMoveFeedback(outcome) {
   };
 }
 
+// Short synthesized motifs. Trails, ordinary captures, and sequence runs stay
+// visual so the felt does not chirp on every turn.
+const AUDIO_CUES = {
+  caida: {
+    id: 'caida',
+    gain: 0.14,
+    tones: [
+      { frequency: 587.33, duration: 0.1 },
+      { frequency: 880, duration: 0.18 },
+    ],
+  },
+  limpia: {
+    id: 'limpia',
+    gain: 0.12,
+    tones: [
+      { frequency: 523.25, duration: 0.1 },
+      { frequency: 783.99, duration: 0.2 },
+    ],
+  },
+  'caida-limpia': {
+    id: 'caida-limpia',
+    gain: 0.16,
+    tones: [
+      { frequency: 587.33, duration: 0.09 },
+      { frequency: 880, duration: 0.09 },
+      { frequency: 1046.5, duration: 0.26 },
+    ],
+  },
+};
+
+export function getFeedbackAudioCue(kind) {
+  return AUDIO_CUES[kind] || null;
+}
+
 function captureSignature(lastCapture) {
   if (!lastCapture) return '';
   return `${lastCapture.playerId}:${lastCapture.playedCardId}:${(lastCapture.capturedIds || []).join(',')}`;

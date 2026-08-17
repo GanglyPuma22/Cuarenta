@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { analyzeMove, applyMove, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
-import { describeRoundTransition, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
+import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
   return { id, rank, suit, value: rankValue(rank) };
@@ -459,5 +459,26 @@ test('resolved move feedback covers trails and gives up on unusable transitions'
     describeRoundTransition(previous, { ...previous, round: { ...previous.round, handNumber: 2 } }),
     null,
     'a freshly dealt hand renders immediately instead of animating'
+  );
+});
+
+test('resolved move feedback audio cues only fire for caída and limpia', () => {
+  assert.equal(getFeedbackAudioCue(null), null);
+  assert.equal(getFeedbackAudioCue('trail'), null, 'trails stay visual only');
+  assert.equal(getFeedbackAudioCue('capture'), null, 'ordinary captures stay visual only');
+  assert.equal(getFeedbackAudioCue('sequence'), null, 'sequence runs stay visual only');
+
+  const caida = getFeedbackAudioCue('caida');
+  assert.equal(caida.id, 'caida');
+  assert.ok(caida.tones.length >= 2, 'the caída cue is a short motif, not a single beep');
+  assert.ok(caida.tones.every((tone) => tone.frequency > 0 && tone.duration > 0));
+  assert.ok(caida.gain > 0 && caida.gain <= 1);
+
+  assert.equal(getFeedbackAudioCue('limpia').id, 'limpia');
+  const stacked = getFeedbackAudioCue('caida-limpia');
+  assert.equal(stacked.id, 'caida-limpia');
+  assert.ok(
+    stacked.tones.length > caida.tones.length,
+    'the stacked bonus gets the longest motif'
   );
 });
