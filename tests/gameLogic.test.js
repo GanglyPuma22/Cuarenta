@@ -320,6 +320,46 @@ test('caída display actions drop the ambiguous match and the trail for that car
   assert.deepEqual(additions[0].move.captureIds, ['b2', 'b3', 'b6', 'b7']);
 });
 
+test('caída display ordering leads with the labelled sweep and keeps the trail last', () => {
+  const displayed = getDisplayedMoves(buildCaidaBoardGame(), 'p1');
+
+  assert.equal(displayed[0].label, 'CAÍDA +2', 'the caída is announced with its bonus');
+  assert.equal(displayed[0].emphasis, 'caida');
+  assert.equal(displayed[0].captureCount, 3, 'the caída takes the target plus its run');
+  assert.equal(displayed[0].sequenceCount, 2, 'two sequence cards ride along');
+  assert.equal(displayed[0].key, 'match:h5:b5_last,b6,b7');
+  assert.equal(displayed[1].label, null, 'ordinary alternatives stay unlabelled');
+
+  const plain = buildGame({
+    board: [
+      card('2', '♣', 'b2'),
+      card('3', '♦', 'b3'),
+      card('5', '♥', 'b5'),
+      card('6', '♠', 'b6'),
+      card('7', '♦', 'b7'),
+    ],
+    hostHand: [card('5', '♠', 'h5')],
+  });
+  const plainDisplayed = getDisplayedMoves(plain, 'p1');
+
+  assert.deepEqual(
+    plainDisplayed.map((action) => action.move.type),
+    ['add', 'match', 'trail'],
+    'without a caída the widest capture leads and the trail is last'
+  );
+  assert.deepEqual(plainDisplayed.map((action) => action.captureCount), [4, 3, 0]);
+
+  const stacked = buildGame({
+    scoreA: 36,
+    board: [card('5', '♥', 'b5')],
+    hostHand: [card('5', '♠', 'h5')],
+    lastPlayedCard: { cardId: 'b5', rank: '5', playerId: 'p4', turnNumber: 1, dealNumber: 1 },
+  });
+
+  assert.equal(getDisplayedMoves(stacked, 'p1')[0].label, 'CAÍDA Y LIMPIA +4');
+  assert.equal(getDisplayedMoves(stacked, 'p1')[0].emphasis, 'caida-limpia');
+});
+
 test('analyzeMove stays aligned with applied scoring bonuses', () => {
   const five = card('5', '♠', 'h5');
   const boardCard = card('5', '♥', 'b5');

@@ -4,7 +4,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, isComputerTurnActive, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const REFERENCE_PANELS = {
@@ -31,10 +31,6 @@ const REFERENCE_PANELS = {
     ],
   },
 };
-
-function moveKey(move) {
-  return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
-}
 
 function cardText(card) {
   return `${card.rank}${card.suit}`;
@@ -410,7 +406,7 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, boardCardsById }) {
+function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById }) {
   const safeCards = Array.isArray(cards) ? cards : [];
   const highlighted = new Set(highlightedCaptureIds || []);
   const targets = new Set(highlightedTargetIds || []);
@@ -503,10 +499,10 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
       </div>
 
       {previewedMove ? (
-        <div className={`board-preview ${previewToneClass}`}>
+        <div className={`board-preview ${previewToneClass} ${previewLabel ? 'is-special' : ''}`}>
           <div className="board-preview-head">
             <div>
-              <div className="board-preview-kicker">{moveKindLabel(previewedMove)} preview</div>
+              <div className="board-preview-kicker">{previewLabel || `${moveKindLabel(previewedMove)} preview`}</div>
               <div className="board-preview-copy">{previewCopy}</div>
             </div>
             <div className="board-preview-badges">
@@ -533,27 +529,31 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
   );
 }
 
-function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPreviewed, dragCardId, onPreview, onPlay }) {
+function MoveOptionCard({ action, playedCard, boardCardsById, isPreviewed, dragCardId, onPreview, onPlay }) {
+  const { move, analysis: moveOutcome, emphasis, label } = action;
+  const targetIds = new Set(move.targetIds || []);
   const captureCards = (move.captureIds || []).map((id) => boardCardsById[id]).filter(Boolean);
+  const sweepCards = captureCards.filter((card) => !targetIds.has(card.id));
   const canDrop = dragCardId === move.playedCardId;
   const kindLabel = moveKindLabel(move);
   const toneClass = moveTone(move);
+  const isSpecial = emphasis !== 'standard';
   const chips = [];
 
   if (move.type !== 'trail') chips.push(`${moveOutcome.captureCount} table card${moveOutcome.captureCount === 1 ? '' : 's'}`);
   if (moveOutcome.sequenceCount > 0) chips.push(`Sequence +${moveOutcome.sequenceCount}`);
-  if (moveOutcome.isCaida) chips.push('Caída +2');
-  if (moveOutcome.isLimpia) chips.push('Limpia +2');
+  if (moveOutcome.isCaida && !isSpecial) chips.push('Caída +2');
+  if (moveOutcome.isLimpia && !isSpecial) chips.push('Limpia +2');
   if (move.type === 'trail') chips.push('No capture');
 
   return (
     <button
       type="button"
-      className={`move-option tone-${toneClass} ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
+      className={`move-option tone-${toneClass} emphasis-${emphasis} ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
       onClick={() => onPlay(move)}
-      onMouseEnter={() => onPreview(moveKey(move))}
+      onMouseEnter={() => onPreview(action.key)}
       onMouseLeave={() => onPreview('')}
-      onFocus={() => onPreview(moveKey(move))}
+      onFocus={() => onPreview(action.key)}
       onBlur={() => onPreview('')}
       onDragOver={(event) => {
         if (!canDrop) return;
@@ -566,6 +566,7 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
         onPlay(move);
       }}
     >
+      {label ? <div className={`move-crown emphasis-${emphasis}`}>{label}</div> : null}
       <div className="move-option-head">
         <span className={`move-kind tone-${toneClass}`}>{kindLabel}</span>
         <span className="move-kicker">{moveOutcome.bonusPoints ? `+${moveOutcome.bonusPoints} swing` : canDrop ? 'Drop to play' : 'Click to play'}</span>
@@ -577,10 +578,20 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
           <span className={`mini-card played ${cardSuitClass(playedCard)}`}>{cardText(playedCard)}</span>
           <span className="move-arrow">→</span>
           <div className="move-capture-row">
-            {captureCards.map((card) => <span key={card.id} className={`mini-card ${cardSuitClass(card)}`}>{cardText(card)}</span>)}
+            {captureCards.map((card) => (
+              <span
+                key={card.id}
+                className={`mini-card ${cardSuitClass(card)} ${targetIds.has(card.id) ? 'is-target' : 'is-sweep'}`}
+              >
+                {cardText(card)}
+              </span>
+            ))}
           </div>
         </div>
       )}
+      {isSpecial && sweepCards.length ? (
+        <div className="move-sweep">Automatic sweep: {sweepCards.map(cardText).join(' → ')}</div>
+      ) : null}
       <div className="move-badges">
         {chips.map((chip) => <span key={chip} className={`move-badge tone-${toneClass}`}>{chip}</span>)}
       </div>
@@ -589,11 +600,10 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
   );
 }
 
-function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, activeCardId, setSelectedCardId, dragCardId, setDragCardId, previewMoveKey, setPreviewMoveKey, moveOutcomes }) {
+function MovePicker({ hand, displayActions, boardCardsById, onPlay, isYourTurn, activeCardId, setSelectedCardId, dragCardId, setDragCardId, previewMoveKey, setPreviewMoveKey }) {
   const handCardsById = useMemo(() => Object.fromEntries(hand.map((card) => [card.id, card])), [hand]);
   const activeCard = handCardsById[activeCardId] || hand[0] || null;
-  const movesForCard = legalMoves.filter((move) => move.playedCardId === activeCard?.id);
-  const orderedMoves = [...movesForCard.filter((move) => move.type !== 'trail'), ...movesForCard.filter((move) => move.type === 'trail')];
+  const hasCaida = displayActions.some((action) => action.analysis.isCaida);
 
   return (
     <section className="hand-shell">
@@ -629,18 +639,26 @@ function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, acti
       </div>
       {isYourTurn ? (
         <div className="play-controls">
-          <div className="ghost-note">
-            {activeCard ? `Capture lanes for ${cardText(activeCard)}. Drag to a live target for speed, or click a lane if you want the exact call spelled out first.` : 'Choose a card to see its capture lines.'}
+          <div className="tray-head">
+            {activeCard ? (
+              <span className={`tray-card ${cardSuitClass(activeCard)}`}>{cardText(activeCard)}</span>
+            ) : null}
+            <div className="ghost-note">
+              {activeCard
+                ? (hasCaida
+                  ? `Caída is live on ${cardText(activeCard)}. The plain match and the trail are hidden so the sweep cannot be missed.`
+                  : `Capture lanes for ${cardText(activeCard)}. Drag to a live target for speed, or click a lane if you want the exact call spelled out first.`)
+                : 'Choose a card to see its capture lines.'}
+            </div>
           </div>
           <div className="move-options-grid">
-            {orderedMoves.map((move) => (
+            {displayActions.map((action) => (
               <MoveOptionCard
-                key={moveKey(move)}
-                move={move}
-                playedCard={handCardsById[move.playedCardId]}
+                key={action.key}
+                action={action}
+                playedCard={handCardsById[action.move.playedCardId]}
                 boardCardsById={boardCardsById}
-                moveOutcome={moveOutcomes[moveKey(move)]}
-                isPreviewed={previewMoveKey === moveKey(move)}
+                isPreviewed={previewMoveKey === action.key}
                 dragCardId={dragCardId}
                 onPreview={setPreviewMoveKey}
                 onPlay={onPlay}
@@ -921,9 +939,13 @@ export default function App() {
   );
   const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
   const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
+  const displayedMoves = useMemo(
+    () => (round ? getDisplayedMoves(game, playerId, legalMoves) : []),
+    [game, legalMoves, playerId, round]
+  );
   const moveOutcomes = useMemo(
-    () => Object.fromEntries(legalMoves.map((move) => [moveKey(move), analyzeMove(game, playerId, move)])),
-    [game, legalMoves, playerId]
+    () => Object.fromEntries(displayedMoves.map((action) => [action.key, action.analysis])),
+    [displayedMoves]
   );
   const isHost = game?.hostId === playerId;
   const isYourTurn = round?.turnPlayerId === playerId;
@@ -931,14 +953,16 @@ export default function App() {
   const canLimpia = round ? ((game?.scores?.[currentTeamId] || 0) < 38) : false;
   const activeCardId = dragCardId || selectedCardId || visibleHand[0]?.id || '';
   const activeCard = visibleHand.find((card) => card.id === activeCardId) || visibleHand[0] || null;
-  const movesForActiveCard = legalMoves.filter((move) => move.playedCardId === activeCard?.id);
+  const displayActionsForActiveCard = displayedMoves.filter((action) => action.move.playedCardId === activeCard?.id);
+  const movesForActiveCard = displayActionsForActiveCard.map((action) => action.move);
   const captureMovesForActiveCard = movesForActiveCard.filter((move) => move.type !== 'trail');
-  const previewedMove = movesForActiveCard.find((move) => moveKey(move) === previewMoveKey)
-    || captureMovesForActiveCard[0]
-    || movesForActiveCard[0]
+  const previewAction = displayActionsForActiveCard.find((action) => action.key === previewMoveKey)
+    || displayActionsForActiveCard.find((action) => action.move.type !== 'trail')
+    || displayActionsForActiveCard[0]
     || null;
+  const previewedMove = previewAction?.move || null;
   const trailMove = movesForActiveCard.find((move) => move.type === 'trail') || null;
-  const previewOutcome = previewedMove ? moveOutcomes[moveKey(previewedMove)] : null;
+  const previewOutcome = previewAction?.analysis || null;
   const previewCopy = previewedMove ? describeMove(previewedMove, boardCardsById, previewOutcome || {}) : '';
   const directDropMoves = useMemo(
     () => buildDirectDropMoves(captureMovesForActiveCard),
@@ -984,16 +1008,17 @@ export default function App() {
   }, [visibleHand, selectedCardId]);
 
   useEffect(() => {
-    const validKeys = movesForActiveCard.map((move) => moveKey(move));
+    const validKeys = displayActionsForActiveCard.map((action) => action.key);
     if (!validKeys.length) {
       if (previewMoveKey) setPreviewMoveKey('');
       return;
     }
     if (!validKeys.includes(previewMoveKey)) {
-      const preferred = captureMovesForActiveCard[0] || movesForActiveCard[0];
-      setPreviewMoveKey(preferred ? moveKey(preferred) : '');
+      const preferred = displayActionsForActiveCard.find((action) => action.move.type !== 'trail')
+        || displayActionsForActiveCard[0];
+      setPreviewMoveKey(preferred ? preferred.key : '');
     }
-  }, [captureMovesForActiveCard, movesForActiveCard, previewMoveKey]);
+  }, [displayActionsForActiveCard, previewMoveKey]);
 
   async function createGame() {
     const trimmed = name.trim();
@@ -1284,11 +1309,12 @@ export default function App() {
               previewedMove={previewedMove}
               previewOutcome={previewOutcome}
               previewCopy={previewCopy}
+              previewLabel={previewAction?.label || ''}
               boardCardsById={boardCardsById}
             />
             <MovePicker
               hand={visibleHand}
-              legalMoves={legalMoves}
+              displayActions={displayActionsForActiveCard}
               boardCardsById={boardCardsById}
               onPlay={playChosenMove}
               isYourTurn={isYourTurn}
@@ -1298,7 +1324,6 @@ export default function App() {
               setDragCardId={setDragCardId}
               previewMoveKey={previewMoveKey}
               setPreviewMoveKey={setPreviewMoveKey}
-              moveOutcomes={moveOutcomes}
             />
             {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
           </section>
