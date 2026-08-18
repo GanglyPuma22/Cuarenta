@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
@@ -349,6 +349,62 @@ test('hands keep continuing because there is no hand limit', () => {
   assert.equal(next.status, 'playing');
   assert.equal(next.round.handNumber, 13);
   assert.ok(next.scores.A >= 18);
+});
+
+test('the computer turn key is scoped to the hand, the deal, and the active player', () => {
+  const game = buildGame({ hostHand: [card('5', '♠', 'h5')] });
+  game.players.p1.isComputer = true;
+  game.players.p2.isComputer = true;
+
+  const key = getComputerTurnKey(game);
+  assert.ok(key, 'an active computer turn has a scheduling key');
+  assert.equal(getComputerTurnKey(game), key, 'the same state keeps the same key');
+
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, handNumber: 2 } }),
+    key,
+    'a new hand is a new scheduling identity'
+  );
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, activeDeal: 2 } }),
+    key,
+    'a new deal is a new scheduling identity'
+  );
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, turnPlayerId: 'p2' } }),
+    key,
+    'a different computer is a new scheduling identity'
+  );
+
+  assert.equal(getComputerTurnKey(null), null);
+  assert.equal(
+    getComputerTurnKey({ ...game, round: { ...game.round, turnPlayerId: 'p3' } }),
+    null,
+    'a human turn schedules nothing'
+  );
+  assert.equal(
+    getComputerTurnKey({ ...game, status: 'finished', round: { ...game.round, status: 'finished' } }),
+    null,
+    'a finished game schedules nothing'
+  );
+});
+
+test('a computer that played the last card of a hand is rescheduled for the new one', () => {
+  const game = buildFinalPlayOfHand({ capturedA: 22, capturedB: 18 });
+  game.players.p1.isComputer = true;
+
+  const finishedHandKey = getComputerTurnKey(game);
+  const next = closeHand(game);
+  // The same computer draws the opening turn of the new hand.
+  const opensNextHand = { ...next, round: { ...next.round, turnPlayerId: 'p1' } };
+
+  assert.ok(finishedHandKey);
+  assert.equal(next.round.handNumber, 2);
+  assert.notEqual(
+    getComputerTurnKey(opensNextHand),
+    finishedHandKey,
+    'an unchanged player id must not reuse the finished hand key'
+  );
 });
 
 test('a card score that reaches forty ends the match without dealing another hand', () => {

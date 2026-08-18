@@ -4,7 +4,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { applyMove, createInitialGameState, generateGameCode, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from './lib/moveFeedback';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
@@ -1089,14 +1089,20 @@ export default function App() {
     && round.lastPlayedCard.turnNumber === round.playsInCurrentDeal
     ? round.lastPlayedCard.cardId
     : null;
+  const computerTurnKey = getComputerTurnKey(game);
 
+  // Scheduling keys off the hand/deal/player identity rather than the player id
+  // alone, so the computer that closed a hand still gets a fresh turn when the
+  // next hand opens on it. The write stays a host-only transaction, and the key
+  // is re-checked against the committed state so a stale timer cannot double-play.
   useEffect(() => {
-    if (!isHost || !isComputerTurnActive(game) || !gameRef || !playerId) return undefined;
+    if (!isHost || !computerTurnKey || !gameRef || !playerId) return undefined;
 
     const timer = window.setTimeout(() => {
       runTransaction(gameRef, (current) => {
         const activeComputerId = current?.round?.turnPlayerId;
         if (!current || current.hostId !== playerId || !current.players?.[activeComputerId]?.isComputer) return current;
+        if (getComputerTurnKey(current) !== computerTurnKey) return current;
         const move = selectComputerMove(current, activeComputerId);
         return move ? applyMove(current, activeComputerId, move) : current;
       }, { applyLocally: false }).catch((transactionError) => {
@@ -1105,7 +1111,7 @@ export default function App() {
     }, 650);
 
     return () => window.clearTimeout(timer);
-  }, [game?.players, game?.round?.turnPlayerId, gameRef, isHost, playerId]);
+  }, [computerTurnKey, gameRef, isHost, playerId]);
 
   // The board always renders the authoritative state. The feedback layer is a
   // transient overlay derived from the transition, so a missing transition costs

@@ -506,6 +506,16 @@ export function isComputerTurnActive(game) {
   );
 }
 
+// Scheduling identity for the host-driven bot turn. Hands roll over on their own,
+// so the player id alone is not unique: the computer that closed a hand can also
+// open the next one. Folding in the hand and deal keeps that a distinct turn to
+// schedule instead of a repeat of the one already played.
+export function getComputerTurnKey(game) {
+  if (!isComputerTurnActive(game)) return null;
+  const round = game.round;
+  return `${round.handNumber}:${round.activeDeal}:${round.turnPlayerId}`;
+}
+
 function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };
