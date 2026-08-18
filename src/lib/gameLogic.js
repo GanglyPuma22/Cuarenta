@@ -506,6 +506,16 @@ export function isComputerTurnActive(game) {
   );
 }
 
+// Scheduling identity for the host-driven bot turn. Hands roll over on their own,
+// so the player id alone is not unique: the computer that closed a hand can also
+// open the next one. Folding in the hand and deal keeps that a distinct turn to
+// schedule instead of a repeat of the one already played.
+export function getComputerTurnKey(game) {
+  if (!isComputerTurnActive(game)) return null;
+  const round = game.round;
+  return `${round.handNumber}:${round.activeDeal}:${round.turnPlayerId}`;
+}
+
 function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };
@@ -532,7 +542,8 @@ function finalizeHand(game, lastActorId) {
   }
 
   const nextScores = { A: game.scores.A + pointsByCards.A, B: game.scores.B + pointsByCards.B };
-  round.events.unshift(`Hand ${round.handNumber} scored: Team A +${pointsByCards.A}, Team B +${pointsByCards.B}.`);
+  const handSummary = `Hand ${round.handNumber} scored: Team A +${pointsByCards.A}, Team B +${pointsByCards.B}.`;
+  round.events.unshift(handSummary);
 
   if (nextScores.A >= 40 || nextScores.B >= 40) {
     return withSessionMeta({
@@ -550,9 +561,13 @@ function finalizeHand(game, lastActorId) {
     });
   }
 
+  // Under 40 the match continues immediately; there is no hand limit and no host
+  // action in between. The finished hand's score line rides along on the new
+  // round so the table can still read why the deal changed.
   const players = game.seating.map((playerId) => game.players[playerId]);
   const nextDealerIndex = (round.dealerIndex + 1) % players.length;
   const nextRound = buildRound(players, nextDealerIndex, nextScores, round.handNumber + 1);
+  nextRound.events.push(handSummary);
 
   return withSessionMeta({
     ...game,

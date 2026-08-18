@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
@@ -265,6 +265,158 @@ test('computer turns are inactive after a game finishes', () => {
     status: 'finished',
     round: { ...activeGame.round, status: 'finished' },
   }), false);
+});
+
+
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+// The next hand is shuffled, and a freak four-of-a-kind deal would end the match
+// on its own. Seeding keeps these assertions about the transition itself.
+function withSeededRandom(seed, run) {
+  const original = Math.random;
+  Math.random = seededRandom(seed);
+  try {
+    return run();
+  } finally {
+    Math.random = original;
+  }
+}
+
+// Deal 2 with only the host still holding a card, so the next play closes the hand.
+function buildFinalPlayOfHand({ scoreA = 0, scoreB = 0, capturedA = 0, capturedB = 0, handNumber = 1 } = {}) {
+  const game = buildGame({
+    scoreA,
+    scoreB,
+    activeDeal: 2,
+    playsInCurrentDeal: 19,
+    board: [],
+    hostHand: [card('K', '♠', 'hk')],
+  });
+
+  for (const playerId of ['p2', 'p3', 'p4']) {
+    game.round.hands[playerId] = [];
+    game.round.perDealHands[2][playerId] = [];
+  }
+
+  game.round.handNumber = handNumber;
+  game.round.capturedCardCount = { A: capturedA, B: capturedB };
+  return game;
+}
+
+function closeHand(game, seed = 7) {
+  const move = getLegalMoves(game.round, 'p1').find((candidate) => candidate.type === 'trail');
+  assert.ok(move, 'the fixture must leave the host one playable card');
+  return withSeededRandom(seed, () => applyMove(game, 'p1', move));
+}
+
+test('a hand scored under forty continues straight into the next hand', () => {
+  const next = closeHand(buildFinalPlayOfHand({ capturedA: 22, capturedB: 18 }));
+
+  assert.equal(next.status, 'playing');
+  assert.equal(next.winner, null);
+  assert.ok(next.scores.A >= 8, 'the card majority is scored before the continuation decision');
+  assert.equal(next.round.handNumber, 2);
+  assert.equal(next.round.activeDeal, 1);
+  assert.equal(next.round.playsInCurrentDeal, 0);
+  assert.equal(next.round.dealerIndex, 1, 'the deal passes to the next seat');
+  assert.ok(next.seating.includes(next.round.turnPlayerId));
+  assert.ok(
+    getLegalMoves(next.round, next.round.turnPlayerId).length > 0,
+    'the new hand opens on a playable turn'
+  );
+  assert.ok(
+    next.round.events.some((event) => event.startsWith('Hand 2 started')),
+    'the new hand announces itself'
+  );
+  assert.ok(
+    next.round.events.includes('Hand 1 scored: Team A +8, Team B +0.'),
+    'the finished hand carries its scoring line into the new hand'
+  );
+});
+
+test('hands keep continuing because there is no hand limit', () => {
+  const next = closeHand(
+    buildFinalPlayOfHand({ handNumber: 12, scoreA: 10, scoreB: 12, capturedA: 21, capturedB: 19 }),
+    23
+  );
+
+  assert.equal(next.status, 'playing');
+  assert.equal(next.round.handNumber, 13);
+  assert.ok(next.scores.A >= 18);
+});
+
+test('the computer turn key is scoped to the hand, the deal, and the active player', () => {
+  const game = buildGame({ hostHand: [card('5', '♠', 'h5')] });
+  game.players.p1.isComputer = true;
+  game.players.p2.isComputer = true;
+
+  const key = getComputerTurnKey(game);
+  assert.ok(key, 'an active computer turn has a scheduling key');
+  assert.equal(getComputerTurnKey(game), key, 'the same state keeps the same key');
+
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, handNumber: 2 } }),
+    key,
+    'a new hand is a new scheduling identity'
+  );
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, activeDeal: 2 } }),
+    key,
+    'a new deal is a new scheduling identity'
+  );
+  assert.notEqual(
+    getComputerTurnKey({ ...game, round: { ...game.round, turnPlayerId: 'p2' } }),
+    key,
+    'a different computer is a new scheduling identity'
+  );
+
+  assert.equal(getComputerTurnKey(null), null);
+  assert.equal(
+    getComputerTurnKey({ ...game, round: { ...game.round, turnPlayerId: 'p3' } }),
+    null,
+    'a human turn schedules nothing'
+  );
+  assert.equal(
+    getComputerTurnKey({ ...game, status: 'finished', round: { ...game.round, status: 'finished' } }),
+    null,
+    'a finished game schedules nothing'
+  );
+});
+
+test('a computer that played the last card of a hand is rescheduled for the new one', () => {
+  const game = buildFinalPlayOfHand({ capturedA: 22, capturedB: 18 });
+  game.players.p1.isComputer = true;
+
+  const finishedHandKey = getComputerTurnKey(game);
+  const next = closeHand(game);
+  // The same computer draws the opening turn of the new hand.
+  const opensNextHand = { ...next, round: { ...next.round, turnPlayerId: 'p1' } };
+
+  assert.ok(finishedHandKey);
+  assert.equal(next.round.handNumber, 2);
+  assert.notEqual(
+    getComputerTurnKey(opensNextHand),
+    finishedHandKey,
+    'an unchanged player id must not reuse the finished hand key'
+  );
+});
+
+test('a card score that reaches forty ends the match without dealing another hand', () => {
+  const next = closeHand(buildFinalPlayOfHand({ scoreA: 32, capturedA: 22, capturedB: 18 }));
+
+  assert.equal(next.status, 'finished');
+  assert.equal(next.winner, 'A');
+  assert.equal(next.scores.A, 40);
+  assert.equal(next.round.status, 'finished');
+  assert.equal(next.round.handNumber, 1, 'the winning hand stays the last one dealt');
+  assert.ok(next.finishedAt);
+  assert.equal(next.round.events[0], 'Hand 1 scored: Team A +8, Team B +0.');
 });
 
 
