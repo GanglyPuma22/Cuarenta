@@ -68,4 +68,3 @@
 3. Run: `npm test && npm run build && git diff --check`.
 4. Manually inspect ordinary capture, sequence, caída, limpia, and reduced-motion states in narrow portrait and landscape.
 5. Commit: `feat: optimize the mobile play surface`.
-
