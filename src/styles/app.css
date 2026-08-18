@@ -1712,6 +1712,55 @@ button:focus-visible {
   line-height: 1.45;
 }
 
+/* A finished hand deals the next one on its own, so the change is announced over
+   the felt instead of in a layout slot. It never takes pointer events, so the
+   next opening turn — human or computer — is never blocked behind it. */
+.hand-notice {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  max-width: min(440px, calc(100vw - 24px));
+  padding: 10px 22px;
+  border-radius: 18px;
+  text-align: center;
+  background: linear-gradient(160deg, rgba(48, 85, 72, 0.96) 0%, rgba(34, 64, 53, 0.96) 100%);
+  border: 1px solid rgba(255, 244, 216, 0.28);
+  box-shadow: 0 22px 44px rgba(12, 26, 21, 0.32);
+  color: #fdf6e9;
+  pointer-events: none;
+  z-index: 26;
+  animation: hand-notice-in 420ms cubic-bezier(0.2, 1.1, 0.3, 1) both;
+}
+
+.hand-notice-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.hand-notice-title {
+  font-family: 'Noto Serif', serif;
+  font-size: clamp(18px, 2.4vw, 22px);
+  line-height: 1.12;
+}
+
+.hand-notice-summary {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.82;
+}
+
+@keyframes hand-notice-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 .error-banner {
   position: fixed;
   left: 50%;
@@ -2033,6 +2082,11 @@ button:focus-visible {
     height: 52px;
   }
 
+  .hand-notice {
+    top: 60px;
+    padding: 6px 16px;
+  }
+
   .cuarenta-app {
     padding: 62px 12px 16px;
   }
@@ -2196,5 +2250,11 @@ button:focus-visible {
   .move-option.drop-ready,
   .hand-card.selected {
     transform: none;
+  }
+
+  .hand-notice {
+    animation: none;
+    opacity: 1;
+    transform: translateX(-50%);
   }
 }

@@ -9,6 +9,7 @@ import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } fro
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
 const FEEDBACK_HOLD_MS = { standard: 1400, special: 2600 };
+const HAND_NOTICE_HOLD_MS = 2600;
 
 const REFERENCE_PANELS = {
   rules: {
@@ -228,6 +229,21 @@ function MoveFeedbackLayer({ feedback }) {
           <div className="outcome-points">+{feedback.points}</div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// A finished hand deals the next one on its own, so the felt gets a short toast
+// rather than a host-driven interstitial. It never takes pointer events, so a
+// computer opening the new hand is not blocked behind it.
+function HandTransitionNotice({ notice }) {
+  if (!notice) return null;
+
+  return (
+    <div className="hand-notice" role="status" aria-live="polite">
+      <span className="hand-notice-kicker">Cards redealt</span>
+      <span className="hand-notice-title">Hand {notice.handNumber} begins</span>
+      {notice.summary ? <span className="hand-notice-summary">{notice.summary}</span> : null}
     </div>
   );
 }
@@ -852,9 +868,12 @@ export default function App() {
   const [previewMoveKey, setPreviewMoveKey] = useState('');
   const [referenceTab, setReferenceTab] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [handNotice, setHandNotice] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const previousGameRef = useRef(null);
   const feedbackCounterRef = useRef(0);
+  const handNumberRef = useRef(null);
+  const handNoticeCounterRef = useRef(0);
   const audioContextRef = useRef(null);
   const [authState, setAuthState] = useState(() => ({
     status: hasFirebase ? 'loading' : 'unconfigured',
@@ -1128,6 +1147,26 @@ export default function App() {
     feedbackCounterRef.current += 1;
     setFeedback({ ...resolved, id: feedbackCounterRef.current, transition });
   }, [game]);
+
+  // Watches the authoritative hand number rather than a local action, so every
+  // seat sees the same announcement whether a human or a computer closed the hand.
+  useEffect(() => {
+    const handNumber = game?.round?.handNumber || null;
+    const previousHandNumber = handNumberRef.current;
+    handNumberRef.current = handNumber;
+    if (!handNumber || !previousHandNumber || handNumber === previousHandNumber) return undefined;
+
+    handNoticeCounterRef.current += 1;
+    const id = handNoticeCounterRef.current;
+    const summary = (game?.round?.events || []).find((event) => event.startsWith(`Hand ${previousHandNumber} scored`)) || '';
+    setHandNotice({ id, handNumber, summary });
+
+    const timer = window.setTimeout(
+      () => setHandNotice((current) => (current?.id === id ? null : current)),
+      HAND_NOTICE_HOLD_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [game?.round?.handNumber]);
 
   function toggleSound() {
     if (soundEnabled) {
@@ -1458,6 +1497,7 @@ export default function App() {
 
       {game && round && isParticipant ? (
         <section className="game-layout">
+          <HandTransitionNotice notice={handNotice} />
           <aside className="sidebar-column">
             <SidePanels compact={isCompactLayout} summary="Details · seat and score">
               <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
