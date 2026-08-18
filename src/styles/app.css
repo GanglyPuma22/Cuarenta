@@ -14,6 +14,8 @@
   --felt-deep: #224035;
   --felt-line: rgba(255, 244, 216, 0.18);
   --good: #245b43;
+  --bonus: #a8690f;
+  --bonus-deep: #6f440a;
   --danger: #7a232b;
   --shadow: 0 22px 48px rgba(67, 40, 26, 0.12);
   --shadow-soft: 0 12px 24px rgba(67, 40, 26, 0.08);
@@ -59,6 +61,18 @@ button:disabled {
 .cuarenta-app {
   min-height: 100vh;
   padding: 92px 18px 28px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .topbar {
@@ -194,6 +208,12 @@ button:disabled {
 
 .share-pill strong {
   color: var(--primary-deep);
+}
+
+.sound-toggle.is-on {
+  background: rgba(36, 91, 67, 0.14);
+  border-color: rgba(36, 91, 67, 0.24);
+  color: var(--good);
 }
 
 .reference-overlay {
@@ -845,6 +865,154 @@ button:focus-visible {
   --preview-solid: #ddf1e8;
 }
 
+.board-shell.is-resolving.kind-caida,
+.board-shell.is-resolving.kind-limpia,
+.board-shell.is-resolving.kind-caida-limpia {
+  border-color: rgba(240, 199, 122, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 244, 216, 0.08),
+    inset 0 0 62px rgba(168, 105, 15, 0.28),
+    var(--shadow);
+}
+
+.move-flight {
+  --pile-x: -160px;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.move-flight.team-B {
+  --pile-x: 160px;
+}
+
+.flight-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, 84%);
+}
+
+.flight-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 12px 12px;
+  border-radius: 14px;
+  background: rgba(255, 252, 246, 0.97);
+  border: 1px solid rgba(94, 61, 47, 0.14);
+  box-shadow: 0 16px 30px rgba(16, 30, 24, 0.34);
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.flight-card.is-red {
+  color: #a8342d;
+}
+
+.flight-card.is-dark {
+  color: #241b17;
+}
+
+.flight-card.is-played {
+  animation: flight-play 460ms cubic-bezier(0.22, 0.9, 0.28, 1) both;
+}
+
+.move-flight.kind-trail .flight-card.is-played {
+  animation: flight-trail 620ms cubic-bezier(0.22, 0.9, 0.28, 1) both;
+}
+
+.flight-card.is-captured {
+  animation: flight-to-pile 760ms cubic-bezier(0.5, 0, 0.2, 1) both;
+  animation-delay: calc(220ms + var(--flight-index, 0) * 70ms);
+}
+
+.flight-pile {
+  position: absolute;
+  bottom: 16%;
+  left: 50%;
+  transform: translateX(-50%) translateX(var(--pile-x));
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(12, 26, 21, 0.72);
+  border: 1px solid rgba(255, 244, 216, 0.24);
+  color: #fdf6e6;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  animation: pile-pulse 900ms ease both;
+  animation-delay: 320ms;
+}
+
+.outcome-overlay {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px 26px;
+  border-radius: 22px;
+  background: linear-gradient(150deg, rgba(168, 105, 15, 0.96) 0%, rgba(122, 63, 24, 0.94) 100%);
+  border: 1px solid rgba(255, 236, 196, 0.4);
+  box-shadow: 0 26px 50px rgba(12, 26, 21, 0.4);
+  color: #fff8ea;
+  animation: outcome-pop 480ms cubic-bezier(0.2, 1.2, 0.3, 1) both;
+}
+
+.outcome-overlay.kind-limpia {
+  background: linear-gradient(150deg, rgba(36, 91, 67, 0.96) 0%, rgba(24, 64, 47, 0.94) 100%);
+}
+
+.outcome-title {
+  font-size: clamp(20px, 4.4vw, 34px);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.outcome-points {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  opacity: 0.86;
+}
+
+@keyframes flight-play {
+  0% { opacity: 0; transform: translateY(46px) scale(0.86); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes flight-trail {
+  0% { opacity: 0; transform: translateY(52px) scale(0.88); }
+  55% { opacity: 1; transform: translateY(0) scale(1.04); }
+  100% { opacity: 0; transform: translateY(-6px) scale(1); }
+}
+
+@keyframes flight-to-pile {
+  0% { opacity: 0; transform: translateY(16px) scale(0.92); }
+  32% { opacity: 1; transform: translateY(0) scale(1.02); }
+  100% { opacity: 0; transform: translate(var(--pile-x), 96px) scale(0.5) rotate(-6deg); }
+}
+
+@keyframes pile-pulse {
+  0% { opacity: 0; transform: translateX(-50%) translateX(var(--pile-x)) scale(0.8); }
+  40% { opacity: 1; transform: translateX(-50%) translateX(var(--pile-x)) scale(1.05); }
+  100% { opacity: 0.9; transform: translateX(-50%) translateX(var(--pile-x)) scale(1); }
+}
+
+@keyframes outcome-pop {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  60% { opacity: 1; transform: translateX(-50%) scale(1.06); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
 .board-shell-armed {
   border-color: rgba(255, 244, 216, 0.25);
   box-shadow:
@@ -1019,7 +1187,9 @@ button:focus-visible {
 
 .card-status-tag {
   top: 8px;
-  right: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   background: rgba(122, 35, 43, 0.14);
   color: var(--danger);
 }
@@ -1028,6 +1198,22 @@ button:focus-visible {
   top: 8px;
   left: 50%;
   transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* The caída target carries both tags; stack them, and reserve the room they
+   need so neither pill prints over the card's rank. */
+.board-card.has-preview-target .card-status-tag {
+  top: 32px;
+}
+
+.board-card.has-preview-target,
+.board-card.is-last-played {
+  padding-top: 32px;
+}
+
+.board-card.has-preview-target.is-last-played {
+  padding-top: 56px;
 }
 
 .capture-step-tag {
@@ -1214,6 +1400,34 @@ button:focus-visible {
   gap: 12px;
 }
 
+.tray-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The selected-card chip is redundant next to the full-size hand on desktop. */
+.tray-card {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(94, 61, 47, 0.14);
+  background: rgba(255, 253, 249, 0.96);
+  font-weight: 900;
+  flex: none;
+}
+
+.tray-card.is-red {
+  color: #a8342d;
+}
+
+.tray-card.is-dark {
+  color: #241b17;
+}
+
 .move-option {
   border: 1px solid rgba(94, 61, 47, 0.12);
   border-radius: 20px;
@@ -1242,6 +1456,64 @@ button:focus-visible {
   transform: translateY(-2px);
   border-color: rgba(140, 79, 54, 0.26);
   box-shadow: var(--shadow-soft);
+}
+
+.move-option.emphasis-caida,
+.move-option.emphasis-limpia,
+.move-option.emphasis-caida-limpia {
+  grid-column: 1 / -1;
+  border-width: 2px;
+  border-color: var(--bonus);
+  background: linear-gradient(180deg, rgba(255, 244, 224, 0.98) 0%, rgba(255, 252, 245, 0.92) 100%);
+  box-shadow: 0 14px 30px rgba(150, 96, 16, 0.16);
+}
+
+.move-crown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: start;
+  justify-self: start;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--bonus);
+  color: #fffaf0;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+
+.move-crown.emphasis-caida-limpia {
+  background: linear-gradient(100deg, var(--bonus) 0%, var(--primary) 100%);
+}
+
+.move-crown.emphasis-limpia {
+  background: var(--good);
+}
+
+.move-sweep {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(150, 96, 16, 0.1);
+  color: var(--bonus-deep);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.mini-card.is-sweep {
+  background: rgba(150, 96, 16, 0.14);
+  border-color: rgba(150, 96, 16, 0.24);
+}
+
+.board-preview.is-special {
+  border-color: var(--bonus);
+  box-shadow: 0 18px 34px rgba(150, 96, 16, 0.24);
+}
+
+.board-preview.is-special .board-preview-kicker {
+  color: var(--bonus);
+  font-size: 14px;
 }
 
 .move-option-head {
@@ -1594,5 +1866,335 @@ button:focus-visible {
 
   .utility-row {
     display: grid;
+  }
+}
+
+/* ---- Compact play surface -------------------------------------------------
+   Below 860px the side columns fold into Details drawers (see SidePanels) and
+   the felt, the selected card, and the live actions share one screen. */
+
+.panel-drawer {
+  border-radius: 24px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.panel-drawer-summary {
+  list-style: none;
+  padding: 14px 18px;
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.panel-drawer-summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-drawer-summary::after {
+  content: ' ▾';
+}
+
+.panel-drawer[open] > .panel-drawer-summary::after {
+  content: ' ▴';
+}
+
+.panel-drawer-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+@media (max-width: 860px) and (orientation: portrait) {
+  .center-column {
+    gap: 10px;
+  }
+
+  .turn-banner {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .turn-banner p {
+    display: none;
+  }
+
+  .turn-banner h2 {
+    font-size: 21px;
+  }
+
+  .board-shell {
+    min-height: 210px;
+    padding: 46px 10px 12px;
+  }
+
+  /* Keep the felt readout on one line so it never lands under the cards. */
+  .board-hud {
+    flex-wrap: nowrap;
+  }
+
+  .hud-chip {
+    padding: 5px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .table-grid {
+    gap: 8px;
+  }
+
+  .board-card.stitch-card {
+    width: 74px;
+    min-height: 110px;
+    padding: 7px;
+  }
+
+  .board-card .card-corner {
+    font-size: 18px;
+  }
+
+  .board-card .card-center {
+    font-size: 20px;
+  }
+
+  .board-card .card-status-tag,
+  .board-card .card-target-tag,
+  .board-card .capture-step-tag {
+    font-size: 8px;
+    padding: 3px 5px;
+  }
+
+  .board-card.has-preview-target .card-status-tag {
+    top: 26px;
+  }
+
+  .board-card.has-preview-target,
+  .board-card.is-last-played {
+    padding-top: 26px;
+  }
+
+  .board-card.has-preview-target.is-last-played {
+    padding-top: 45px;
+  }
+
+  /* The tray covers the bottom of the screen, so the felt's own preview would
+     be hidden behind it. The action lanes carry the same detail. */
+  .board-preview {
+    display: none;
+  }
+
+  /* The hand and its action lanes ride the bottom of the viewport while the
+     felt stays visible above them. Only the lane list scrolls, so the hand row
+     keeps its full height instead of being squeezed by the tray's max-height. */
+  .hand-shell {
+    position: sticky;
+    bottom: 6px;
+    z-index: 8;
+    max-height: 46vh;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+    background: rgba(252, 247, 240, 0.97);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -14px 30px rgba(67, 40, 26, 0.16);
+  }
+
+  .hand-head {
+    display: none;
+  }
+
+  .stitch-hand-row {
+    padding: 2px 8px 4px;
+  }
+
+  .play-controls,
+  .muted-note {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tray-card {
+    display: inline-flex;
+  }
+
+  .move-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1024px) and (max-height: 620px) and (orientation: landscape) {
+  .topbar {
+    height: 52px;
+  }
+
+  .cuarenta-app {
+    padding: 62px 12px 16px;
+  }
+
+  .center-column {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-areas:
+      'banner banner'
+      'board actions'
+      'hand hand';
+    gap: 10px;
+    align-items: start;
+  }
+
+  .turn-banner {
+    grid-area: banner;
+    padding: 10px 14px;
+  }
+
+  .turn-banner h2 {
+    font-size: 18px;
+  }
+
+  .turn-banner p {
+    display: none;
+  }
+
+  .board-shell {
+    grid-area: board;
+    min-height: 210px;
+    padding: 44px 12px 16px;
+    border-radius: 24px;
+  }
+
+  .board-preview {
+    display: none;
+  }
+
+  /* Let the hand row and the action lane become siblings of the felt so they
+     can sit beside and below it. */
+  .hand-shell {
+    display: contents;
+  }
+
+  .hand-head {
+    display: none;
+  }
+
+  .stitch-hand-row {
+    grid-area: hand;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 2px;
+  }
+
+  .play-controls,
+  .muted-note {
+    grid-area: actions;
+    max-height: 54vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px;
+    border-radius: 20px;
+    border: 1px solid var(--surface-border);
+    background: rgba(252, 247, 240, 0.97);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .move-options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tray-card {
+    display: inline-flex;
+  }
+
+  .stitch-card {
+    width: 66px;
+    min-height: 96px;
+    padding: 6px;
+  }
+
+  .card-corner {
+    font-size: 17px;
+  }
+
+  .card-center {
+    font-size: 20px;
+  }
+
+  .card-status-tag,
+  .card-target-tag,
+  .capture-step-tag {
+    font-size: 8px;
+    padding: 3px 5px;
+  }
+
+  .board-card.has-preview-target .card-status-tag {
+    top: 25px;
+  }
+
+  .board-card.has-preview-target,
+  .board-card.is-last-played {
+    padding-top: 24px;
+  }
+
+  .board-card.has-preview-target.is-last-played {
+    padding-top: 42px;
+  }
+
+  .move-flight {
+    --pile-x: -90px;
+  }
+
+  .move-flight.team-B {
+    --pile-x: 90px;
+  }
+
+  .outcome-overlay {
+    top: 16%;
+    padding: 8px 18px;
+  }
+}
+
+/* Reduced motion keeps every outcome label, badge, and highlight. Only the
+   travel and pop are removed. */
+@media (prefers-reduced-motion: reduce) {
+  /* These selectors must out-specify the animated rules above, so the state
+     modifiers are repeated here rather than matching .flight-card alone. */
+  .flight-card.is-played,
+  .flight-card.is-captured,
+  .move-flight.kind-trail .flight-card.is-played,
+  .flight-pile,
+  .outcome-overlay {
+    animation: none;
+    opacity: 1;
+  }
+
+  .flight-card.is-played,
+  .flight-card.is-captured {
+    transform: none;
+  }
+
+  .flight-pile {
+    transform: translateX(-50%) translateX(var(--pile-x));
+  }
+
+  .outcome-overlay {
+    transform: translateX(-50%);
+  }
+
+  .board-shell,
+  .move-option,
+  .stitch-card,
+  .hand-card,
+  .board-card {
+    transition: none;
+  }
+
+  .move-option.previewed,
+  .move-option.drop-ready,
+  .hand-card.selected {
+    transform: none;
   }
 }

@@ -4,8 +4,11 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { analyzeMove, applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getLegalMoves, getVisibleHand, isComputerTurnActive, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { applyMove, createInitialGameState, generateGameCode, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from './lib/moveFeedback';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
+
+const FEEDBACK_HOLD_MS = { standard: 1400, special: 2600 };
 
 const REFERENCE_PANELS = {
   rules: {
@@ -31,10 +34,6 @@ const REFERENCE_PANELS = {
     ],
   },
 };
-
-function moveKey(move) {
-  return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
-}
 
 function cardText(card) {
   return `${card.rank}${card.suit}`;
@@ -166,6 +165,71 @@ function describeMove(move, boardCardsById, outcome) {
     return `Add ${setText}, then keep collecting upward through ${cardText(highest)}.`;
   }
   return `Add ${setText} exactly and take the set.`;
+}
+
+// Cues are synthesized so the build ships no audio assets. Nothing is created
+// until the player deliberately turns sound on, which also supplies the gesture
+// browsers require before an AudioContext may start.
+function playAudioCue(context, cue) {
+  if (!context || !cue || context.state === 'closed') return;
+
+  let startAt = context.currentTime + 0.02;
+  for (const tone of cue.tones) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(tone.frequency, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(cue.gain, startAt + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + tone.duration);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + tone.duration + 0.04);
+    startAt += tone.duration;
+  }
+}
+
+function announceFeedback(feedback) {
+  if (!feedback) return '';
+  const { playerName, playedCard, capturedCards } = feedback.transition;
+  const who = playerName || 'A player';
+
+  if (feedback.kind === 'trail') return `${who} trailed ${cardText(playedCard)}.`;
+
+  const taken = capturedCards.map(cardText).join(', ');
+  const bonus = feedback.points ? ` ${feedback.title} for ${feedback.points} points.` : '';
+  return `${who} played ${cardText(playedCard)} and captured ${taken}.${bonus}`;
+}
+
+function MoveFeedbackLayer({ feedback }) {
+  if (!feedback) return null;
+  const { playedCard, capturedCards, teamId } = feedback.transition;
+
+  return (
+    <div className={`move-flight kind-${feedback.kind} team-${teamId || 'A'}`} aria-hidden="true">
+      <div className="flight-cards">
+        <span className={`flight-card is-played ${cardSuitClass(playedCard)}`}>{cardText(playedCard)}</span>
+        {capturedCards.map((card, index) => (
+          <span
+            key={card.id}
+            className={`flight-card is-captured ${cardSuitClass(card)}`}
+            style={{ '--flight-index': index }}
+          >
+            {cardText(card)}
+          </span>
+        ))}
+      </div>
+      {capturedCards.length ? (
+        <div className="flight-pile">Team {teamId} +{capturedCards.length + 1}</div>
+      ) : null}
+      {feedback.isSpecial ? (
+        <div className={`outcome-overlay kind-${feedback.kind}`}>
+          <div className="outcome-title">{feedback.title}</div>
+          <div className="outcome-points">+{feedback.points}</div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function stampSessionMetadata(target, { now = Date.now(), action, actorId }) {
@@ -410,7 +474,7 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, boardCardsById }) {
+function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById, feedback }) {
   const safeCards = Array.isArray(cards) ? cards : [];
   const highlighted = new Set(highlightedCaptureIds || []);
   const targets = new Set(highlightedTargetIds || []);
@@ -420,7 +484,9 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
   const sequenceIds = new Set((previewedMove?.captureIds || []).filter((id) => !targets.has(id)));
 
   return (
-    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass}`}>
+    <section className={`board-shell ${trailArmed ? 'board-shell-armed' : ''} preview-tone-${previewToneClass} ${feedback ? `is-resolving kind-${feedback.kind}` : ''}`}>
+      {/* Remounting per outcome restarts the CSS animations for back-to-back moves. */}
+      <MoveFeedbackLayer key={feedback?.id || 'idle'} feedback={feedback} />
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
         <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
@@ -503,10 +569,10 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
       </div>
 
       {previewedMove ? (
-        <div className={`board-preview ${previewToneClass}`}>
+        <div className={`board-preview ${previewToneClass} ${previewLabel ? 'is-special' : ''}`}>
           <div className="board-preview-head">
             <div>
-              <div className="board-preview-kicker">{moveKindLabel(previewedMove)} preview</div>
+              <div className="board-preview-kicker">{previewLabel || `${moveKindLabel(previewedMove)} preview`}</div>
               <div className="board-preview-copy">{previewCopy}</div>
             </div>
             <div className="board-preview-badges">
@@ -533,27 +599,31 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
   );
 }
 
-function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPreviewed, dragCardId, onPreview, onPlay }) {
+function MoveOptionCard({ action, playedCard, boardCardsById, isPreviewed, dragCardId, onPreview, onPlay }) {
+  const { move, analysis: moveOutcome, emphasis, label } = action;
+  const targetIds = new Set(move.targetIds || []);
   const captureCards = (move.captureIds || []).map((id) => boardCardsById[id]).filter(Boolean);
+  const sweepCards = captureCards.filter((card) => !targetIds.has(card.id));
   const canDrop = dragCardId === move.playedCardId;
   const kindLabel = moveKindLabel(move);
   const toneClass = moveTone(move);
+  const isSpecial = emphasis !== 'standard';
   const chips = [];
 
   if (move.type !== 'trail') chips.push(`${moveOutcome.captureCount} table card${moveOutcome.captureCount === 1 ? '' : 's'}`);
   if (moveOutcome.sequenceCount > 0) chips.push(`Sequence +${moveOutcome.sequenceCount}`);
-  if (moveOutcome.isCaida) chips.push('Caída +2');
-  if (moveOutcome.isLimpia) chips.push('Limpia +2');
+  if (moveOutcome.isCaida && !isSpecial) chips.push('Caída +2');
+  if (moveOutcome.isLimpia && !isSpecial) chips.push('Limpia +2');
   if (move.type === 'trail') chips.push('No capture');
 
   return (
     <button
       type="button"
-      className={`move-option tone-${toneClass} ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
+      className={`move-option tone-${toneClass} emphasis-${emphasis} ${isPreviewed ? 'previewed' : ''} ${canDrop ? 'drop-ready' : ''}`}
       onClick={() => onPlay(move)}
-      onMouseEnter={() => onPreview(moveKey(move))}
+      onMouseEnter={() => onPreview(action.key)}
       onMouseLeave={() => onPreview('')}
-      onFocus={() => onPreview(moveKey(move))}
+      onFocus={() => onPreview(action.key)}
       onBlur={() => onPreview('')}
       onDragOver={(event) => {
         if (!canDrop) return;
@@ -566,6 +636,7 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
         onPlay(move);
       }}
     >
+      {label ? <div className={`move-crown emphasis-${emphasis}`}>{label}</div> : null}
       <div className="move-option-head">
         <span className={`move-kind tone-${toneClass}`}>{kindLabel}</span>
         <span className="move-kicker">{moveOutcome.bonusPoints ? `+${moveOutcome.bonusPoints} swing` : canDrop ? 'Drop to play' : 'Click to play'}</span>
@@ -577,10 +648,20 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
           <span className={`mini-card played ${cardSuitClass(playedCard)}`}>{cardText(playedCard)}</span>
           <span className="move-arrow">→</span>
           <div className="move-capture-row">
-            {captureCards.map((card) => <span key={card.id} className={`mini-card ${cardSuitClass(card)}`}>{cardText(card)}</span>)}
+            {captureCards.map((card) => (
+              <span
+                key={card.id}
+                className={`mini-card ${cardSuitClass(card)} ${targetIds.has(card.id) ? 'is-target' : 'is-sweep'}`}
+              >
+                {cardText(card)}
+              </span>
+            ))}
           </div>
         </div>
       )}
+      {isSpecial && sweepCards.length ? (
+        <div className="move-sweep">Automatic sweep: {sweepCards.map(cardText).join(' → ')}</div>
+      ) : null}
       <div className="move-badges">
         {chips.map((chip) => <span key={chip} className={`move-badge tone-${toneClass}`}>{chip}</span>)}
       </div>
@@ -589,11 +670,10 @@ function MoveOptionCard({ move, playedCard, boardCardsById, moveOutcome, isPrevi
   );
 }
 
-function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, activeCardId, setSelectedCardId, dragCardId, setDragCardId, previewMoveKey, setPreviewMoveKey, moveOutcomes }) {
+function MovePicker({ hand, displayActions, boardCardsById, onPlay, isYourTurn, activeCardId, setSelectedCardId, dragCardId, setDragCardId, previewMoveKey, setPreviewMoveKey }) {
   const handCardsById = useMemo(() => Object.fromEntries(hand.map((card) => [card.id, card])), [hand]);
   const activeCard = handCardsById[activeCardId] || hand[0] || null;
-  const movesForCard = legalMoves.filter((move) => move.playedCardId === activeCard?.id);
-  const orderedMoves = [...movesForCard.filter((move) => move.type !== 'trail'), ...movesForCard.filter((move) => move.type === 'trail')];
+  const hasCaida = displayActions.some((action) => action.analysis.isCaida);
 
   return (
     <section className="hand-shell">
@@ -629,18 +709,26 @@ function MovePicker({ hand, legalMoves, boardCardsById, onPlay, isYourTurn, acti
       </div>
       {isYourTurn ? (
         <div className="play-controls">
-          <div className="ghost-note">
-            {activeCard ? `Capture lanes for ${cardText(activeCard)}. Drag to a live target for speed, or click a lane if you want the exact call spelled out first.` : 'Choose a card to see its capture lines.'}
+          <div className="tray-head">
+            {activeCard ? (
+              <span className={`tray-card ${cardSuitClass(activeCard)}`}>{cardText(activeCard)}</span>
+            ) : null}
+            <div className="ghost-note">
+              {activeCard
+                ? (hasCaida
+                  ? `Caída is live on ${cardText(activeCard)}. The plain match and the trail are hidden so the sweep cannot be missed.`
+                  : `Capture lanes for ${cardText(activeCard)}. Drag to a live target for speed, or click a lane if you want the exact call spelled out first.`)
+                : 'Choose a card to see its capture lines.'}
+            </div>
           </div>
           <div className="move-options-grid">
-            {orderedMoves.map((move) => (
+            {displayActions.map((action) => (
               <MoveOptionCard
-                key={moveKey(move)}
-                move={move}
-                playedCard={handCardsById[move.playedCardId]}
+                key={action.key}
+                action={action}
+                playedCard={handCardsById[action.move.playedCardId]}
                 boardCardsById={boardCardsById}
-                moveOutcome={moveOutcomes[moveKey(move)]}
-                isPreviewed={previewMoveKey === moveKey(move)}
+                isPreviewed={previewMoveKey === action.key}
                 dragCardId={dragCardId}
                 onPreview={setPreviewMoveKey}
                 onPlay={onPlay}
@@ -692,6 +780,36 @@ function RecentCallsPanel({ round }) {
   );
 }
 
+// Compact layouts fold the side columns behind a Details control so the felt,
+// the selected card, and the live actions stay on one screen. Desktop keeps the
+// panels rendered inline exactly as before.
+function useCompactLayout() {
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const query = window.matchMedia('(max-width: 860px)');
+    const sync = (event) => setIsCompact(event.matches);
+    sync(query);
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  return isCompact;
+}
+
+function SidePanels({ compact, summary, children }) {
+  if (!compact) return <>{children}</>;
+
+  return (
+    <details className="panel-drawer">
+      <summary className="panel-drawer-summary">{summary}</summary>
+      <div className="panel-drawer-body">{children}</div>
+    </details>
+  );
+}
+
 function ReconnectDock({ game, onCopyShareLink, linkCopied }) {
   return (
     <details className="reconnect-dock">
@@ -733,12 +851,18 @@ export default function App() {
   const [dragCardId, setDragCardId] = useState('');
   const [previewMoveKey, setPreviewMoveKey] = useState('');
   const [referenceTab, setReferenceTab] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const previousGameRef = useRef(null);
+  const feedbackCounterRef = useRef(0);
+  const audioContextRef = useRef(null);
   const [authState, setAuthState] = useState(() => ({
     status: hasFirebase ? 'loading' : 'unconfigured',
     playerId: '',
     error: '',
   }));
 
+  const isCompactLayout = useCompactLayout();
   const playerId = authState.playerId;
   const realtimeAuthProbe = useMemo(
     () => (db ? createRealtimeAuthProbe(db) : null),
@@ -921,9 +1045,13 @@ export default function App() {
   );
   const visibleHand = round ? (getVisibleHand(round, playerId) || []) : [];
   const legalMoves = round ? (getLegalMoves(round, playerId) || []) : [];
+  const displayedMoves = useMemo(
+    () => (round ? getDisplayedMoves(game, playerId, legalMoves) : []),
+    [game, legalMoves, playerId, round]
+  );
   const moveOutcomes = useMemo(
-    () => Object.fromEntries(legalMoves.map((move) => [moveKey(move), analyzeMove(game, playerId, move)])),
-    [game, legalMoves, playerId]
+    () => Object.fromEntries(displayedMoves.map((action) => [action.key, action.analysis])),
+    [displayedMoves]
   );
   const isHost = game?.hostId === playerId;
   const isYourTurn = round?.turnPlayerId === playerId;
@@ -931,14 +1059,16 @@ export default function App() {
   const canLimpia = round ? ((game?.scores?.[currentTeamId] || 0) < 38) : false;
   const activeCardId = dragCardId || selectedCardId || visibleHand[0]?.id || '';
   const activeCard = visibleHand.find((card) => card.id === activeCardId) || visibleHand[0] || null;
-  const movesForActiveCard = legalMoves.filter((move) => move.playedCardId === activeCard?.id);
+  const displayActionsForActiveCard = displayedMoves.filter((action) => action.move.playedCardId === activeCard?.id);
+  const movesForActiveCard = displayActionsForActiveCard.map((action) => action.move);
   const captureMovesForActiveCard = movesForActiveCard.filter((move) => move.type !== 'trail');
-  const previewedMove = movesForActiveCard.find((move) => moveKey(move) === previewMoveKey)
-    || captureMovesForActiveCard[0]
-    || movesForActiveCard[0]
+  const previewAction = displayActionsForActiveCard.find((action) => action.key === previewMoveKey)
+    || displayActionsForActiveCard.find((action) => action.move.type !== 'trail')
+    || displayActionsForActiveCard[0]
     || null;
+  const previewedMove = previewAction?.move || null;
   const trailMove = movesForActiveCard.find((move) => move.type === 'trail') || null;
-  const previewOutcome = previewedMove ? moveOutcomes[moveKey(previewedMove)] : null;
+  const previewOutcome = previewAction?.analysis || null;
   const previewCopy = previewedMove ? describeMove(previewedMove, boardCardsById, previewOutcome || {}) : '';
   const directDropMoves = useMemo(
     () => buildDirectDropMoves(captureMovesForActiveCard),
@@ -977,6 +1107,61 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [game?.players, game?.round?.turnPlayerId, gameRef, isHost, playerId]);
 
+  // The board always renders the authoritative state. The feedback layer is a
+  // transient overlay derived from the transition, so a missing transition costs
+  // an animation, never a turn.
+  useEffect(() => {
+    const previous = previousGameRef.current;
+    previousGameRef.current = game;
+    if (!previous?.round || !game?.round) return;
+
+    const transition = describeRoundTransition(previous, game);
+    const resolved = transition ? resolveMoveFeedback(transition.outcome) : null;
+    if (!resolved) return;
+
+    feedbackCounterRef.current += 1;
+    setFeedback({ ...resolved, id: feedbackCounterRef.current, transition });
+  }, [game]);
+
+  function toggleSound() {
+    if (soundEnabled) {
+      setSoundEnabled(false);
+      return;
+    }
+
+    try {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) return;
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContextCtor();
+      }
+      audioContextRef.current.resume?.();
+      setSoundEnabled(true);
+    } catch {
+      setError('This browser blocked the audio cues. The visual feedback still runs.');
+    }
+  }
+
+  useEffect(() => () => {
+    audioContextRef.current?.close?.();
+    audioContextRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!soundEnabled || !feedback) return;
+    playAudioCue(audioContextRef.current, getFeedbackAudioCue(feedback.kind));
+  }, [feedback, soundEnabled]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const hold = feedback.isSpecial ? FEEDBACK_HOLD_MS.special : FEEDBACK_HOLD_MS.standard;
+    const timer = window.setTimeout(
+      () => setFeedback((current) => (current?.id === feedback.id ? null : current)),
+      hold
+    );
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
   useEffect(() => {
     if (!visibleHand.some((card) => card.id === selectedCardId)) {
       setSelectedCardId(visibleHand[0]?.id || '');
@@ -984,16 +1169,17 @@ export default function App() {
   }, [visibleHand, selectedCardId]);
 
   useEffect(() => {
-    const validKeys = movesForActiveCard.map((move) => moveKey(move));
+    const validKeys = displayActionsForActiveCard.map((action) => action.key);
     if (!validKeys.length) {
       if (previewMoveKey) setPreviewMoveKey('');
       return;
     }
     if (!validKeys.includes(previewMoveKey)) {
-      const preferred = captureMovesForActiveCard[0] || movesForActiveCard[0];
-      setPreviewMoveKey(preferred ? moveKey(preferred) : '');
+      const preferred = displayActionsForActiveCard.find((action) => action.move.type !== 'trail')
+        || displayActionsForActiveCard[0];
+      setPreviewMoveKey(preferred ? preferred.key : '');
     }
-  }, [captureMovesForActiveCard, movesForActiveCard, previewMoveKey]);
+  }, [displayActionsForActiveCard, previewMoveKey]);
 
   async function createGame() {
     const trimmed = name.trim();
@@ -1149,6 +1335,16 @@ export default function App() {
           </nav>
         </div>
         <div className="topbar-actions">
+          {showGameChrome ? (
+            <button
+              type="button"
+              className={`secondary-chip sound-toggle ${soundEnabled ? 'is-on' : ''}`}
+              aria-pressed={soundEnabled}
+              onClick={toggleSound}
+            >
+              {soundEnabled ? 'Sound on' : 'Sound off'}
+            </button>
+          ) : null}
           {showGameChrome ? <button type="button" className="secondary-chip" onClick={returnHome}>Home</button> : null}
           {showGameChrome ? <GameCode code={gameCode} /> : null}
           {game && round && isParticipant ? <ReconnectDock game={game} onCopyShareLink={copyShareLink} linkCopied={linkCopied} /> : null}
@@ -1250,11 +1446,17 @@ export default function App() {
         </section>
       ) : null}
 
+      <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {announceFeedback(feedback)}
+      </div>
+
       {game && round && isParticipant ? (
         <section className="game-layout">
           <aside className="sidebar-column">
-            <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
-            <MatchStatePanel game={game} currentPlayerId={playerId} />
+            <SidePanels compact={isCompactLayout} summary="Details · seat and score">
+              <PlayerPanel round={round} game={game} currentPlayerId={playerId} />
+              <MatchStatePanel game={game} currentPlayerId={playerId} />
+            </SidePanels>
           </aside>
           <section className="center-column">
             <TurnBanner
@@ -1284,11 +1486,13 @@ export default function App() {
               previewedMove={previewedMove}
               previewOutcome={previewOutcome}
               previewCopy={previewCopy}
+              previewLabel={previewAction?.label || ''}
               boardCardsById={boardCardsById}
+              feedback={feedback}
             />
             <MovePicker
               hand={visibleHand}
-              legalMoves={legalMoves}
+              displayActions={displayActionsForActiveCard}
               boardCardsById={boardCardsById}
               onPlay={playChosenMove}
               isYourTurn={isYourTurn}
@@ -1298,13 +1502,14 @@ export default function App() {
               setDragCardId={setDragCardId}
               previewMoveKey={previewMoveKey}
               setPreviewMoveKey={setPreviewMoveKey}
-              moveOutcomes={moveOutcomes}
             />
             {game.status === 'finished' ? <section className="notice-card">Game over — Team {game.winner} wins.</section> : null}
           </section>
           <aside className="activity-column">
-            <TurnOrderPanel game={game} currentPlayerId={playerId} />
-            <RecentCallsPanel round={round} />
+            <SidePanels compact={isCompactLayout} summary="Details · turn order and calls">
+              <TurnOrderPanel game={game} currentPlayerId={playerId} />
+              <RecentCallsPanel round={round} />
+            </SidePanels>
           </aside>
         </section>
       ) : null}

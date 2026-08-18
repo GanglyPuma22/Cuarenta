@@ -406,6 +406,73 @@ export function analyzeMove(game, playerId, move) {
   };
 }
 
+export function moveKey(move) {
+  return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
+}
+
+function displayEmphasis(analysis) {
+  if (analysis.isCaida && analysis.isLimpia) return 'caida-limpia';
+  if (analysis.isCaida) return 'caida';
+  if (analysis.isLimpia) return 'limpia';
+  return 'standard';
+}
+
+function displayLabel(emphasis, bonusPoints) {
+  if (emphasis === 'caida-limpia') return `CAÍDA Y LIMPIA +${bonusPoints}`;
+  if (emphasis === 'caida') return `CAÍDA +${bonusPoints}`;
+  if (emphasis === 'limpia') return `LIMPIA +${bonusPoints}`;
+  return null;
+}
+
+// Presentation-only. The engine keeps offering every legal move; this list just
+// decides what a human should be shown so a live caída cannot be mistaken for an
+// ordinary same-rank match. It never removes the last capture alternative for a
+// card, so the caída is highlighted rather than forced.
+export function getDisplayedMoves(game, playerId, moves) {
+  const source = Array.isArray(moves) ? moves : getLegalMoves(game?.round, playerId);
+  const cardOrder = [];
+  const actions = source.map((move, index) => {
+    const analysis = analyzeMove(game, playerId, move);
+    const emphasis = displayEmphasis(analysis);
+    if (!cardOrder.includes(move.playedCardId)) cardOrder.push(move.playedCardId);
+
+    return {
+      move,
+      key: moveKey(move),
+      index,
+      analysis,
+      emphasis,
+      label: displayLabel(emphasis, analysis.bonusPoints),
+      captureCount: analysis.captureCount,
+      sequenceCount: analysis.sequenceCount,
+      bonusPoints: analysis.bonusPoints,
+    };
+  });
+
+  const caidaCardIds = new Set(
+    actions.filter((action) => action.analysis.isCaida).map((action) => action.move.playedCardId)
+  );
+
+  return actions
+    .filter((action) => {
+      if (!caidaCardIds.has(action.move.playedCardId)) return true;
+      if (action.analysis.isCaida) return true;
+      return action.move.type !== 'match' && action.move.type !== 'trail';
+    })
+    .sort((left, right) => {
+      const cardDelta = cardOrder.indexOf(left.move.playedCardId) - cardOrder.indexOf(right.move.playedCardId);
+      if (cardDelta !== 0) return cardDelta;
+      if (left.analysis.isCaida !== right.analysis.isCaida) return left.analysis.isCaida ? -1 : 1;
+
+      const leftTrail = left.move.type === 'trail';
+      const rightTrail = right.move.type === 'trail';
+      if (leftTrail !== rightTrail) return leftTrail ? 1 : -1;
+      if (left.bonusPoints !== right.bonusPoints) return right.bonusPoints - left.bonusPoints;
+      if (left.captureCount !== right.captureCount) return right.captureCount - left.captureCount;
+      return left.index - right.index;
+    });
+}
+
 function computerMoveKey(move) {
   return `${move.type}:${move.playedCardId}:${(move.captureIds || []).join(',')}`;
 }
