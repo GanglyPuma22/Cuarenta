@@ -866,8 +866,7 @@ button:focus-visible {
 }
 
 .board-shell.is-resolving.kind-caida,
-.board-shell.is-resolving.kind-limpia,
-.board-shell.is-resolving.kind-caida-limpia {
+.board-shell.is-resolving.kind-limpia {
   border-color: rgba(240, 199, 122, 0.55);
   box-shadow:
     inset 0 0 0 1px rgba(255, 244, 216, 0.08),
@@ -1459,8 +1458,7 @@ button:focus-visible {
 }
 
 .move-option.emphasis-caida,
-.move-option.emphasis-limpia,
-.move-option.emphasis-caida-limpia {
+.move-option.emphasis-limpia {
   grid-column: 1 / -1;
   border-width: 2px;
   border-color: var(--bonus);
@@ -1483,9 +1481,6 @@ button:focus-visible {
   letter-spacing: 0.09em;
 }
 
-.move-crown.emphasis-caida-limpia {
-  background: linear-gradient(100deg, var(--bonus) 0%, var(--primary) 100%);
-}
 
 .move-crown.emphasis-limpia {
   background: var(--good);

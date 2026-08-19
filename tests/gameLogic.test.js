@@ -566,11 +566,15 @@ test('resolved move feedback maps an analysed outcome to an animation kind', () 
   assert.equal(resolveMoveFeedback(outcome({ isCaida: true, bonusPoints: 2 })).kind, 'caida');
   assert.equal(resolveMoveFeedback(outcome({ isLimpia: true, bonusPoints: 2 })).kind, 'limpia');
 
-  const stacked = resolveMoveFeedback(outcome({ isCaida: true, isLimpia: true, bonusPoints: 4 }));
-  assert.equal(stacked.kind, 'caida-limpia');
-  assert.equal(stacked.title, 'CAÍDA Y LIMPIA');
-  assert.equal(stacked.points, 4);
-  assert.equal(stacked.isSpecial, true);
+  // analyzeMove can no longer report both, but the presentation layer stays
+  // defensive: if a stale payload ever claims both, caída wins outright.
+  const feedback = resolveMoveFeedback(outcome({
+    isCaida: true, isLimpia: true, bonusPoints: 2,
+  }));
+  assert.equal(feedback.kind, 'caida');
+  assert.equal(feedback.title, 'CAÍDA');
+  assert.equal(feedback.points, 2);
+  assert.equal(feedback.isSpecial, true);
   assert.equal(resolveMoveFeedback(outcome({ captureCount: 3, sequenceCount: 2 })).isSpecial, false);
 });
 
@@ -634,12 +638,13 @@ test('resolved move feedback audio cues only fire for caída and limpia', () => 
   assert.ok(caida.tones.every((tone) => tone.frequency > 0 && tone.duration > 0));
   assert.ok(caida.gain > 0 && caida.gain <= 1);
 
-  assert.equal(getFeedbackAudioCue('limpia').id, 'limpia');
-  const stacked = getFeedbackAudioCue('caida-limpia');
-  assert.equal(stacked.id, 'caida-limpia');
-  assert.ok(
-    stacked.tones.length > caida.tones.length,
-    'the stacked bonus gets the longest motif'
+  const limpia = getFeedbackAudioCue('limpia');
+  assert.equal(limpia.id, 'limpia');
+  assert.ok(limpia.tones.length >= 2, 'the limpia cue is a short motif too');
+  assert.equal(
+    getFeedbackAudioCue('caida-limpia'),
+    null,
+    'there is no stacked caída-limpia cue to fire'
   );
 });
 

@@ -6,14 +6,14 @@ const FEEDBACK_TITLES = {
   sequence: 'Sequence',
   caida: 'CAÍDA',
   limpia: 'LIMPIA',
-  'caida-limpia': 'CAÍDA Y LIMPIA',
 };
 
-const SPECIAL_KINDS = new Set(['caida', 'limpia', 'caida-limpia']);
+const SPECIAL_KINDS = new Set(['caida', 'limpia']);
 
+// Caída outranks limpia, so it is checked first and a clear that is also a
+// caída animates as a plain caída.
 function feedbackKind(outcome) {
   if (outcome.move.type === 'trail') return 'trail';
-  if (outcome.isCaida && outcome.isLimpia) return 'caida-limpia';
   if (outcome.isCaida) return 'caida';
   if (outcome.isLimpia) return 'limpia';
   return outcome.sequenceCount > 0 ? 'sequence' : 'capture';
@@ -52,15 +52,6 @@ const AUDIO_CUES = {
     tones: [
       { frequency: 523.25, duration: 0.1 },
       { frequency: 783.99, duration: 0.2 },
-    ],
-  },
-  'caida-limpia': {
-    id: 'caida-limpia',
-    gain: 0.16,
-    tones: [
-      { frequency: 587.33, duration: 0.09 },
-      { frequency: 880, duration: 0.09 },
-      { frequency: 1046.5, duration: 0.26 },
     ],
   },
 };
