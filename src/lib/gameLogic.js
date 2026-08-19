@@ -436,7 +436,13 @@ export function analyzeMove(game, playerId, move) {
     && selected.targetIds?.[0] === round.lastPlayedCard.cardId
     && round.lastPlayedCard.dealNumber === round.activeDeal
     && round.lastPlayedCard.turnNumber === round.playsInCurrentDeal;
-  const isLimpia = selected.type !== 'trail' && remainingBoardCards === 0 && scoreBefore < 38;
+  // A valid caída is always +2 and outranks limpia, so a caída that happens to
+  // clear the felt never also collects the limpia bonus. Limpia stays blocked at
+  // 38; caída does not.
+  const isLimpia = !isCaida
+    && selected.type !== 'trail'
+    && remainingBoardCards === 0
+    && scoreBefore < 38;
 
   return {
     move: selected,
@@ -453,14 +459,12 @@ export function moveKey(move) {
 }
 
 function displayEmphasis(analysis) {
-  if (analysis.isCaida && analysis.isLimpia) return 'caida-limpia';
   if (analysis.isCaida) return 'caida';
   if (analysis.isLimpia) return 'limpia';
   return 'standard';
 }
 
 function displayLabel(emphasis, bonusPoints) {
-  if (emphasis === 'caida-limpia') return `CAÍDA Y LIMPIA +${bonusPoints}`;
   if (emphasis === 'caida') return `CAÍDA +${bonusPoints}`;
   if (emphasis === 'limpia') return `LIMPIA +${bonusPoints}`;
   return null;
@@ -675,7 +679,8 @@ export function applyMove(game, playerId, move) {
     round.scores[teamId] += pointsEarned;
     round.lastPlayedCard = null;
     round.lastCapture = { playerId, playedCardId: playedCard.id, capturedIds: [...captureIds] };
-    round.events.unshift(`${game.players[playerId].name} played ${summarizeCard(playedCard)} for ${selected.type}${pointsEarned ? ` (+${pointsEarned})` : ''}.`);
+    const outcomeLabel = analysis.isCaida ? 'caída' : (analysis.isLimpia ? 'limpia' : selected.type);
+    round.events.unshift(`${game.players[playerId].name} played ${summarizeCard(playedCard)} for ${outcomeLabel}${pointsEarned ? ` (+${pointsEarned})` : ''}.`);
   }
 
   round.playsInCurrentDeal += 1;

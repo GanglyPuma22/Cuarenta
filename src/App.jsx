@@ -28,8 +28,9 @@ const REFERENCE_PANELS = {
     title: 'High-value scoring quirks worth remembering',
     lead: 'Cuarenta gets swingy fast, so the drawer keeps the annoying edge cases close instead of hiding them in README land.',
     bullets: [
-      'Limpia is +2 for clearing the table. Caída y limpia stack for +4 when both happen together.',
-      'A team on 38 cannot collect limpia. A team on 36 can still win with caída y limpia.',
+      'Caída is +2, and it takes precedence over limpia. A caída that also clears the table is still worth exactly +2.',
+      'Limpia is +2 only for a clear that is not a caída. The two bonuses never stack, so no single play scores +4.',
+      'A team on 38 cannot collect limpia, but it can still collect caída. That is why 38 plus a caída wins the match at 40.',
       'Ronda is +4 only while your team is under 30. The special remembered ronda-caída +10 bonus is still not implemented here.',
       'At the end of the hand, loose cards left on the table do not belong to either team unless the final play was a limpia.',
     ],

@@ -114,7 +114,7 @@ test('same-rank single-card addition is suppressed so hover targets stay unambig
   assert.equal(moves.filter((move) => move.type === 'add').length, 0);
 });
 
-test('matching the immediately previous card counts as caída and can stack with limpia', () => {
+test('matching the immediately previous card scores caída and never stacks limpia', () => {
   const five = card('5', '♠', 'h5');
   const boardCard = card('5', '♥', 'b5');
   const game = buildGame({
@@ -133,8 +133,9 @@ test('matching the immediately previous card counts as caída and can stack with
   const move = getLegalMoves(game.round, 'p1').find((candidate) => candidate.type === 'match');
   const next = applyMove(game, 'p1', move);
 
-  assert.equal(next.scores.A, 40);
-  assert.match(next.round.events[0], /\(\+4\)/);
+  assert.equal(next.scores.A, 38);
+  assert.match(next.round.events[0], /Caída.*\(\+2\)/i);
+  assert.doesNotMatch(next.round.events[0], /Limpia|\(\+4\)/i);
 });
 
 test('first play after a new deal does not count as caída even if the dealer card is matched', () => {
@@ -502,15 +503,19 @@ test('caída display ordering leads with the labelled sweep and keeps the trail 
   );
   assert.deepEqual(plainDisplayed.map((action) => action.captureCount), [4, 3, 0]);
 
-  const stacked = buildGame({
+  const clearing = buildGame({
     scoreA: 36,
     board: [card('5', '♥', 'b5')],
     hostHand: [card('5', '♠', 'h5')],
     lastPlayedCard: { cardId: 'b5', rank: '5', playerId: 'p4', turnNumber: 1, dealNumber: 1 },
   });
 
-  assert.equal(getDisplayedMoves(stacked, 'p1')[0].label, 'CAÍDA Y LIMPIA +4');
-  assert.equal(getDisplayedMoves(stacked, 'p1')[0].emphasis, 'caida-limpia');
+  assert.equal(
+    getDisplayedMoves(clearing, 'p1')[0].label,
+    'CAÍDA +2',
+    'a caída that also clears the board is still announced as a plain +2 caída'
+  );
+  assert.equal(getDisplayedMoves(clearing, 'p1')[0].emphasis, 'caida');
 });
 
 test('analyzeMove stays aligned with applied scoring bonuses', () => {
@@ -534,8 +539,9 @@ test('analyzeMove stays aligned with applied scoring bonuses', () => {
   const next = applyMove(game, 'p1', move);
 
   assert.equal(analysis.bonusPoints, next.scores.A - game.scores.A);
+  assert.equal(analysis.bonusPoints, 2);
   assert.equal(analysis.isCaida, true);
-  assert.equal(analysis.isLimpia, true);
+  assert.equal(analysis.isLimpia, false, 'caída takes precedence, so the clear does not also score limpia');
 });
 
 function outcome(overrides = {}) {
@@ -560,11 +566,15 @@ test('resolved move feedback maps an analysed outcome to an animation kind', () 
   assert.equal(resolveMoveFeedback(outcome({ isCaida: true, bonusPoints: 2 })).kind, 'caida');
   assert.equal(resolveMoveFeedback(outcome({ isLimpia: true, bonusPoints: 2 })).kind, 'limpia');
 
-  const stacked = resolveMoveFeedback(outcome({ isCaida: true, isLimpia: true, bonusPoints: 4 }));
-  assert.equal(stacked.kind, 'caida-limpia');
-  assert.equal(stacked.title, 'CAÍDA Y LIMPIA');
-  assert.equal(stacked.points, 4);
-  assert.equal(stacked.isSpecial, true);
+  // analyzeMove can no longer report both, but the presentation layer stays
+  // defensive: if a stale payload ever claims both, caída wins outright.
+  const feedback = resolveMoveFeedback(outcome({
+    isCaida: true, isLimpia: true, bonusPoints: 2,
+  }));
+  assert.equal(feedback.kind, 'caida');
+  assert.equal(feedback.title, 'CAÍDA');
+  assert.equal(feedback.points, 2);
+  assert.equal(feedback.isSpecial, true);
   assert.equal(resolveMoveFeedback(outcome({ captureCount: 3, sequenceCount: 2 })).isSpecial, false);
 });
 
@@ -584,16 +594,18 @@ test('resolved move feedback reads a committed round transition', () => {
   assert.equal(transition.outcome.sequenceCount, 2);
   assert.equal(resolveMoveFeedback(transition.outcome).kind, 'caida');
 
-  const stackedPrevious = buildGame({
+  const clearingPrevious = buildGame({
     scoreA: 36,
     board: [card('5', '♥', 'b5')],
     hostHand: [card('5', '♠', 'h5')],
     lastPlayedCard: { cardId: 'b5', rank: '5', playerId: 'p4', turnNumber: 1, dealNumber: 1 },
   });
-  const stackedMove = getDisplayedMoves(stackedPrevious, 'p1')[0].move;
-  const stacked = describeRoundTransition(stackedPrevious, applyMove(stackedPrevious, 'p1', stackedMove));
-  assert.equal(resolveMoveFeedback(stacked.outcome).kind, 'caida-limpia');
-  assert.equal(stacked.outcome.bonusPoints, 4);
+  const clearingMove = getDisplayedMoves(clearingPrevious, 'p1')[0].move;
+  const clearing = describeRoundTransition(clearingPrevious, applyMove(clearingPrevious, 'p1', clearingMove));
+  assert.equal(resolveMoveFeedback(clearing.outcome).kind, 'caida');
+  assert.equal(clearing.outcome.isCaida, true);
+  assert.equal(clearing.outcome.isLimpia, false);
+  assert.equal(clearing.outcome.bonusPoints, 2);
 });
 
 test('resolved move feedback covers trails and gives up on unusable transitions', () => {
@@ -626,12 +638,13 @@ test('resolved move feedback audio cues only fire for caída and limpia', () => 
   assert.ok(caida.tones.every((tone) => tone.frequency > 0 && tone.duration > 0));
   assert.ok(caida.gain > 0 && caida.gain <= 1);
 
-  assert.equal(getFeedbackAudioCue('limpia').id, 'limpia');
-  const stacked = getFeedbackAudioCue('caida-limpia');
-  assert.equal(stacked.id, 'caida-limpia');
-  assert.ok(
-    stacked.tones.length > caida.tones.length,
-    'the stacked bonus gets the longest motif'
+  const limpia = getFeedbackAudioCue('limpia');
+  assert.equal(limpia.id, 'limpia');
+  assert.ok(limpia.tones.length >= 2, 'the limpia cue is a short motif too');
+  assert.equal(
+    getFeedbackAudioCue('caida-limpia'),
+    null,
+    'there is no stacked caída-limpia cue to fire'
   );
 });
 
