@@ -737,3 +737,184 @@ test('a pruned claims list does not invent a ronda that the deal did not contain
   assert.equal(next.scores.A, 0);
   assert.equal(next.scores.B, 0);
 });
+
+
+// Test-only stand-in for the Realtime Database transport. Firebase drops nulls
+// and stores nothing for an empty array or object, and a parent whose children
+// all vanish disappears with them. Running committed state through this after
+// every move reproduces what a client actually reads back mid-match.
+function pruneLikeFirebase(value) {
+  if (Array.isArray(value)) {
+    const items = value.map(pruneLikeFirebase).filter((item) => item !== undefined);
+    return items.length ? items : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const kept = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const pruned = pruneLikeFirebase(entry);
+      if (pruned !== undefined) kept[key] = pruned;
+    }
+    return Object.keys(kept).length ? kept : undefined;
+  }
+  return value === null || value === undefined ? undefined : value;
+}
+
+function roundTripThroughFirebase(game) {
+  const stored = pruneLikeFirebase(game);
+  assert.ok(stored, 'a committed game is never pruned away entirely');
+  return stored;
+}
+
+function lobbyOf(playerIds) {
+  const names = { p1: 'Ana', p2: 'Beto', p3: 'Caro', p4: 'Diego' };
+  const now = 1755561600000;
+  return {
+    code: 'TESTNG',
+    status: 'lobby',
+    hostId: playerIds[0],
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
+    startedAt: null,
+    finishedAt: null,
+    players: Object.fromEntries(playerIds.map((id, index) => [id, {
+      id,
+      name: names[id],
+      joinedAt: now,
+      lastSeenAt: now,
+      reconnectCount: 0,
+      isHost: index === 0,
+    }])),
+    seating: [...playerIds],
+    scores: { A: 0, B: 0 },
+    lobbyMessage: 'Waiting for players',
+  };
+}
+
+// Deterministic human: rotate through the moves the UI would actually offer, so
+// the simulation drives `getDisplayedMoves` over pruned state as well.
+function chooseHumanMove(game, playerId, moveNumber) {
+  const displayed = getDisplayedMoves(game, playerId).map((action) => action.move);
+  const options = displayed.length ? displayed : getLegalMoves(game.round, playerId);
+  return options[moveNumber % options.length] || null;
+}
+
+// A deal is 20 cards and every move plays exactly one, so a hand is 40 moves.
+// Every hand scores at least two points to some team and scores never fall, so
+// a match cannot exceed 40 hands. The bound is set well above that: tripping it
+// is a real non-termination failure, not a silently truncated match.
+const MAX_MOVES_PER_MATCH = 2400;
+
+function playPrunedMatch({ humanIds, seed }) {
+  return withSeededRandom(seed, () => {
+    let game = roundTripThroughFirebase(startMatchFromLobby(lobbyOf(humanIds)));
+    const humans = new Set(humanIds);
+    let moveNumber = 0;
+    let computerMoves = 0;
+    let hands = game.round.handNumber;
+
+    while (game.status === 'playing') {
+      assert.ok(
+        moveNumber < MAX_MOVES_PER_MATCH,
+        `match did not terminate within ${MAX_MOVES_PER_MATCH} moves (seed ${seed})`
+      );
+
+      const playerId = game.round.turnPlayerId;
+      assert.ok(playerId, 'a playing game always has a seat on turn');
+
+      let move;
+      if (humans.has(playerId)) {
+        move = chooseHumanMove(game, playerId, moveNumber);
+      } else {
+        move = selectComputerMove(game, playerId);
+        computerMoves += 1;
+      }
+      assert.ok(move, `no legal move for ${playerId} at move ${moveNumber} (seed ${seed})`);
+
+      game = roundTripThroughFirebase(applyMove(game, playerId, move));
+      moveNumber += 1;
+      hands = Math.max(hands, game.round.handNumber);
+    }
+
+    return { game, moveNumber, computerMoves, hands };
+  });
+}
+
+function assertCompletedMatch(result, seed) {
+  const { game } = result;
+  assert.equal(game.status, 'finished', `match should finish (seed ${seed})`);
+  assert.ok(['A', 'B'].includes(game.winner), `a finished match names a winner (seed ${seed})`);
+  assert.ok(
+    game.scores[game.winner] >= 40,
+    `the winner reaches forty (seed ${seed}, scores ${JSON.stringify(game.scores)})`
+  );
+  assert.ok(game.finishedAt, 'a finished match is stamped');
+  assert.ok(result.moveNumber > 0, 'the match actually played moves');
+}
+
+const FOUR_HUMAN_SEEDS = [11, 2027, 90210];
+
+test('four human players complete a match to forty while Firebase prunes empty collections', () => {
+  const played = FOUR_HUMAN_SEEDS.map((seed) => {
+    const result = playPrunedMatch({ humanIds: ['p1', 'p2', 'p3', 'p4'], seed });
+    assertCompletedMatch(result, seed);
+    assert.equal(result.computerMoves, 0, 'an all-human table never consults the bot');
+    return result;
+  });
+
+  assert.equal(played.length, FOUR_HUMAN_SEEDS.length, 'every seeded match ran');
+  assert.ok(
+    played.some((result) => result.hands > 1),
+    'at least one match ran past the opening hand, so the deal boundary was crossed under pruning'
+  );
+  assert.ok(
+    played.every((result) => result.moveNumber < MAX_MOVES_PER_MATCH),
+    'termination is proven by the run, not by the bound'
+  );
+});
+
+const MIXED_SEEDS = [5, 1312, 777];
+
+test('a mixed human and computer table completes a match to forty under the same pruning', () => {
+  const played = MIXED_SEEDS.map((seed) => {
+    // Two humans in the lobby; `startMatchFromLobby` seats computer_1 and
+    // computer_2, which puts one bot on each team.
+    const result = playPrunedMatch({ humanIds: ['p1', 'p2'], seed });
+    assertCompletedMatch(result, seed);
+
+    const computerIds = result.game.seating.filter((id) => result.game.players[id].isComputer);
+    assert.deepEqual(computerIds, ['computer_1', 'computer_2'], 'the empty seats were filled by bots');
+    assert.ok(result.computerMoves > 0, `selectComputerMove drove real turns (seed ${seed})`);
+    return result;
+  });
+
+  assert.equal(played.length, MIXED_SEEDS.length, 'every seeded mixed match ran');
+  assert.ok(
+    played.reduce((total, result) => total + result.computerMoves, 0) > 100,
+    'the bot decision path carried a substantial share of the play'
+  );
+  assert.ok(
+    played.every((result) => result.moveNumber < MAX_MOVES_PER_MATCH),
+    'termination is proven by the run, not by the bound'
+  );
+});
+
+test('the transport simulator really does delete the collections the engine reads', () => {
+  // Seed 29 deals no opening ronda, so `rondaClaims` is genuinely empty here.
+  const seeded = withSeededRandom(29, () => startMatchFromLobby(lobbyOf(['p1', 'p2', 'p3', 'p4'])));
+  const stored = roundTripThroughFirebase(seeded);
+
+  assert.equal(stored.round.board, undefined, 'an empty board is not stored');
+  assert.equal(stored.round.capturePiles, undefined, 'two empty capture piles remove their parent');
+  assert.equal(stored.round.lastPlayedCard, undefined, 'nulls are dropped');
+  assert.equal(stored.round.rondaClaims, undefined, 'an empty claims list is not stored');
+  assert.deepEqual(stored.scores, { A: 0, B: 0 }, 'zeroes survive; only empties are pruned');
+  assert.equal(Object.keys(stored.round.hands).length, 4, 'full hands are still stored');
+
+  const emptied = roundTripThroughFirebase({
+    ...stored,
+    round: { ...stored.round, hands: { ...stored.round.hands, p2: [] } },
+  });
+  assert.equal(emptied.round.hands.p2, undefined, 'an emptied hand entry disappears');
+  assert.deepEqual(getVisibleHand(emptied.round, 'p2'), [], 'and the engine reads it as an empty hand');
+});
