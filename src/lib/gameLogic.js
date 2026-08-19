@@ -4,6 +4,7 @@ const NUMERIC_RANKS = new Set(['A', '2', '3', '4', '5', '6', '7']);
 const RANK_TO_VALUE = { A: 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, J: 8, Q: 9, K: 10 };
 const TEAM_IDS = ['A', 'B'];
 const PLAYER_COUNT = 4;
+const DEAL_NUMBERS = [1, 2];
 
 export function rankValue(rank) {
   return RANK_TO_VALUE[rank];
@@ -289,9 +290,50 @@ export function startMatchFromLobby(game) {
   });
 }
 
+// Firebase Realtime Database does not persist empty arrays, so a round read back
+// from a snapshot is missing every collection that was empty when it was written.
+// A player who has emptied their hand comes back with no `hands` entry at all,
+// and a round that never scored a ronda comes back with no `rondaClaims`. Treat a
+// snapshot round as sparse transport data and rebuild the collections the engine
+// indexes into, so a pruned entry reads as an empty collection instead of
+// `undefined`. Only missing entries are defaulted; existing cards are untouched.
+function asCardArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function roundPlayerIds(round, playerIds = []) {
+  const ids = new Set(playerIds);
+  for (const id of asCardArray(round?.turnOrder)) ids.add(id);
+  for (const id of Object.keys(round?.hands || {})) ids.add(id);
+  for (const dealNumber of DEAL_NUMBERS) {
+    for (const id of Object.keys(round?.perDealHands?.[dealNumber] || {})) ids.add(id);
+  }
+  return [...ids];
+}
+
+function normalizeRoundCollections(round, playerIds = []) {
+  const seats = roundPlayerIds(round, playerIds);
+
+  const hands = {};
+  for (const playerId of seats) hands[playerId] = asCardArray(round.hands?.[playerId]);
+  round.hands = hands;
+
+  const perDealHands = {};
+  for (const dealNumber of DEAL_NUMBERS) {
+    const dealt = {};
+    for (const playerId of seats) dealt[playerId] = asCardArray(round.perDealHands?.[dealNumber]?.[playerId]);
+    perDealHands[dealNumber] = dealt;
+  }
+  round.perDealHands = perDealHands;
+
+  round.rondaClaims = Array.isArray(round.rondaClaims) ? round.rondaClaims : [];
+  return round;
+}
+
 function visibleHandForPlayer(round, playerId) {
-  const source = round.perDealHands[round.activeDeal]?.[playerId] || [];
-  return source.filter((card) => round.hands[playerId].some((owned) => owned.id === card.id));
+  const source = asCardArray(round?.perDealHands?.[round?.activeDeal]?.[playerId]);
+  const owned = asCardArray(round?.hands?.[playerId]);
+  return source.filter((card) => owned.some((ownedCard) => ownedCard.id === card.id));
 }
 
 export function getVisibleHand(round, playerId) {
@@ -601,6 +643,7 @@ export function applyMove(game, playerId, move) {
     B: round.scores?.B || 0,
   };
   round.events = Array.isArray(round.events) ? round.events : [];
+  normalizeRoundCollections(round, game.seating);
   if (round.turnPlayerId !== playerId) throw new Error('Not your turn.');
 
   const analysis = analyzeMove({ ...game, round }, playerId, move);
