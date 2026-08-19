@@ -32,6 +32,7 @@ const REFERENCE_PANELS = {
       'Limpia is +2 only for a clear that is not a caída. The two bonuses never stack, so no single play scores +4.',
       'A team on 38 cannot collect limpia, but it can still collect caída. That is why 38 plus a caída wins the match at 40.',
       'Ronda is +4 only while your team is under 30. The special remembered ronda-caída +10 bonus is still not implemented here.',
+      'The card count stops paying at 30, so the last ten points of a match only come from caída and limpia during play.',
       'At the end of the hand, loose cards left on the table do not belong to either team unless the final play was a limpia.',
     ],
   },
@@ -444,13 +445,11 @@ function TurnOrderPanel({ game, currentPlayerId }) {
   );
 }
 
-function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCard, moveOutcomes, lastPlayedCardId, boardCardsById }) {
+function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCard, lastPlayedCardId, boardCardsById }) {
   if (!game || !round) return null;
 
   const isYourTurn = round.turnPlayerId === currentPlayerId;
   const captureMoves = movesForActiveCard.filter((move) => move.type !== 'trail');
-  const liveCaida = captureMoves.some((move) => moveOutcomes[moveKey(move)]?.isCaida);
-  const liveLimpia = captureMoves.some((move) => moveOutcomes[moveKey(move)]?.isLimpia);
   const lastPlayedCard = lastPlayedCardId ? boardCardsById[lastPlayedCardId] : null;
   const currentTurnName = game.players?.[round.turnPlayerId]?.name || 'the table';
   const isComputerTurn = Boolean(game.players?.[round.turnPlayerId]?.isComputer);
@@ -484,14 +483,12 @@ function TurnBanner({ game, round, currentPlayerId, activeCard, movesForActiveCa
       <div className="turn-banner-chips">
         {activeCard ? <span className="turn-chip emphasis">Selected {cardText(activeCard)}</span> : null}
         {lastPlayedCard ? <span className="turn-chip warning">Caída target: {cardText(lastPlayedCard)}</span> : null}
-        {liveCaida ? <span className="turn-chip bonus">Caída live</span> : null}
-        {liveLimpia ? <span className="turn-chip bonus">Limpia live</span> : null}
       </div>
     </section>
   );
 }
 
-function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById, feedback }) {
+function Board({ cards, deckRemaining, highlightedCaptureIds, highlightedTargetIds, captureOrderMap, directDropMoves, previewTargetMeta, trailMove, dragCardId, onPlay, onPreview, lastPlayedCardId, previewedMove, previewOutcome, previewCopy, previewLabel, boardCardsById, feedback }) {
   const safeCards = Array.isArray(cards) ? cards : [];
   const highlighted = new Set(highlightedCaptureIds || []);
   const targets = new Set(highlightedTargetIds || []);
@@ -506,7 +503,6 @@ function Board({ cards, deckRemaining, canLimpia, highlightedCaptureIds, highlig
       <MoveFeedbackLayer key={feedback?.id || 'idle'} feedback={feedback} />
       <div className="board-hud">
         <div className="hud-chip">Deck {deckRemaining}</div>
-        <div className="hud-chip accent">{canLimpia ? 'Limpia available' : 'No limpia at 38+'}</div>
       </div>
 
       <div
@@ -1069,14 +1065,8 @@ export default function App() {
     () => (round ? getDisplayedMoves(game, playerId, legalMoves) : []),
     [game, legalMoves, playerId, round]
   );
-  const moveOutcomes = useMemo(
-    () => Object.fromEntries(displayedMoves.map((action) => [action.key, action.analysis])),
-    [displayedMoves]
-  );
   const isHost = game?.hostId === playerId;
   const isYourTurn = round?.turnPlayerId === playerId;
-  const currentTeamId = round?.teamsByPlayer?.[playerId]?.teamId;
-  const canLimpia = round ? ((game?.scores?.[currentTeamId] || 0) < 38) : false;
   const activeCardId = dragCardId || selectedCardId || visibleHand[0]?.id || '';
   const activeCard = visibleHand.find((card) => card.id === activeCardId) || visibleHand[0] || null;
   const displayActionsForActiveCard = displayedMoves.filter((action) => action.move.playedCardId === activeCard?.id);
@@ -1531,14 +1521,12 @@ export default function App() {
               currentPlayerId={playerId}
               activeCard={activeCard}
               movesForActiveCard={movesForActiveCard}
-              moveOutcomes={moveOutcomes}
               lastPlayedCardId={lastPlayedCardId}
               boardCardsById={boardCardsById}
             />
             <Board
               cards={round.board}
               deckRemaining={round.deckRemaining}
-              canLimpia={canLimpia}
               highlightedCaptureIds={highlightedCaptureIds}
               highlightedTargetIds={highlightedTargetIds}
               captureOrderMap={captureOrderMap}

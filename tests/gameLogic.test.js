@@ -408,16 +408,111 @@ test('a computer that played the last card of a hand is rescheduled for the new 
   );
 });
 
-test('a card score that reaches forty ends the match without dealing another hand', () => {
-  const next = closeHand(buildFinalPlayOfHand({ scoreA: 32, capturedA: 22, capturedB: 18 }));
+// Deal 2 with only the host still holding a card and the caída target face up,
+// so the closing play scores a caída and then finalizes the hand.
+function buildFinalCaidaOfHand({ scoreA = 0, scoreB = 0, capturedA = 0, capturedB = 0 } = {}) {
+  const game = buildGame({
+    scoreA,
+    scoreB,
+    activeDeal: 2,
+    playsInCurrentDeal: 19,
+    board: [card('K', '♦', 'bk_last')],
+    hostHand: [card('K', '♠', 'hk')],
+    lastPlayedCard: {
+      cardId: 'bk_last',
+      rank: 'K',
+      playerId: 'p4',
+      turnNumber: 19,
+      dealNumber: 2,
+    },
+  });
+
+  for (const playerId of ['p2', 'p3', 'p4']) {
+    game.round.hands[playerId] = [];
+    game.round.perDealHands[2][playerId] = [];
+  }
+
+  game.round.capturedCardCount = { A: capturedA, B: capturedB };
+  return game;
+}
+
+function closeHandWithCaida(game, seed = 7) {
+  const move = getLegalMoves(game.round, 'p1').find((candidate) => candidate.type === 'match');
+  assert.ok(move, 'the fixture must leave the host the caída answer card');
+  return withSeededRandom(seed, () => applyMove(game, 'p1', move));
+}
+
+test('a team already on thirty collects nothing from the card count', () => {
+  const next = closeHand(buildFinalPlayOfHand({ scoreA: 32, capturedA: 30, capturedB: 10 }));
+
+  assert.equal(next.scores.A, 32, 'a capped team keeps the score it walked in with');
+  assert.equal(next.status, 'playing', 'the card count cannot carry a capped team to forty');
+  assert.equal(next.winner, null);
+  assert.equal(next.round.handNumber, 2, 'the match continues into the next hand');
+  assert.ok(
+    next.round.events.includes('Hand 1 scored: Team A +0, Team B +0.'),
+    'the score line reports what was actually awarded'
+  );
+});
+
+test('a team under thirty still collects the card count in full', () => {
+  const next = closeHand(buildFinalPlayOfHand({ scoreA: 14, capturedA: 22, capturedB: 18 }));
+
+  assert.equal(next.scores.A, 22, '6 for the count plus 2 for the pair over nineteen');
+  assert.equal(next.scores.B, 0);
+  assert.ok(next.round.events.includes('Hand 1 scored: Team A +8, Team B +0.'));
+});
+
+test('the card count pays only up to thirty', () => {
+  const next = closeHand(buildFinalPlayOfHand({ scoreA: 28, capturedA: 26, capturedB: 14 }));
+
+  assert.equal(next.scores.A, 30, 'twelve card points are trimmed to the two that fit under the cap');
+  assert.equal(next.status, 'playing');
+  assert.ok(next.round.events.includes('Hand 1 scored: Team A +2, Team B +0.'));
+});
+
+test('the thirty cap applies per team', () => {
+  const next = closeHand(buildFinalPlayOfHand({ scoreA: 31, scoreB: 20, capturedA: 10, capturedB: 30 }));
+
+  assert.equal(next.scores.A, 31, 'the capped team is untouched');
+  assert.equal(next.scores.B, 30, 'the other team still collects, up to its own cap');
+  assert.ok(next.round.events.includes('Hand 1 scored: Team A +0, Team B +10.'));
+});
+
+test('limpia still pays after thirty', () => {
+  const queen = card('Q', '♠', 'hq');
+  const game = buildGame({
+    scoreA: 30,
+    board: [card('Q', '♦', 'bq')],
+    hostHand: [queen],
+    lastPlayedCard: null,
+  });
+
+  const move = getLegalMoves(game.round, 'p1').find((candidate) => candidate.type === 'match');
+  const next = applyMove(game, 'p1', move);
+
+  assert.equal(next.scores.A, 32, 'clearing the felt is worth +2 regardless of the card-count cap');
+  assert.match(next.round.events[0], /limpia.*\(\+2\)/i);
+});
+
+test('a caída that reaches forty ends the match without dealing another hand', () => {
+  const next = closeHandWithCaida(buildFinalCaidaOfHand({ scoreA: 38, capturedA: 22, capturedB: 16 }));
 
   assert.equal(next.status, 'finished');
   assert.equal(next.winner, 'A');
-  assert.equal(next.scores.A, 40);
+  assert.equal(next.scores.A, 40, 'the last two points come from the caída, not from the count');
   assert.equal(next.round.status, 'finished');
   assert.equal(next.round.handNumber, 1, 'the winning hand stays the last one dealt');
   assert.ok(next.finishedAt);
-  assert.equal(next.round.events[0], 'Hand 1 scored: Team A +8, Team B +0.');
+  assert.equal(next.round.events[0], 'Hand 1 scored: Team A +0, Team B +0.');
+});
+
+test('a caída crosses thirty without the card count topping it up', () => {
+  const next = closeHandWithCaida(buildFinalCaidaOfHand({ scoreA: 30, capturedA: 22, capturedB: 16 }));
+
+  assert.equal(next.scores.A, 32, 'the bonus lands even though the count is capped out');
+  assert.equal(next.status, 'playing', 'thirty-two is still short of forty');
+  assert.ok(next.round.events.includes('Hand 1 scored: Team A +0, Team B +0.'));
 });
 
 
@@ -813,9 +908,11 @@ function chooseHumanMove(game, playerId, moveNumber) {
 }
 
 // A deal is 20 cards and every move plays exactly one, so a hand is 40 moves.
-// Every hand scores at least two points to some team and scores never fall, so
-// a match cannot exceed 40 hands. The bound is set well above that: tripping it
-// is a real non-termination failure, not a silently truncated match.
+// Scores never fall, and once both teams are capped out of the card count the
+// last ten points still arrive through the caída and limpia that ordinary play
+// keeps producing. The bound is 60 hands, far past what the seeded matches below
+// actually take: tripping it is a real non-termination failure, not a silently
+// truncated match.
 const MAX_MOVES_PER_MATCH = 2400;
 
 function playPrunedMatch({ humanIds, seed }) {

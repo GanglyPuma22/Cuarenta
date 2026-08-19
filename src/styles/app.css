@@ -752,7 +752,6 @@ button:focus-visible {
 
 .timeline-flag.current,
 .turn-chip.emphasis,
-.turn-chip.bonus,
 .move-badge {
   background: rgba(180, 141, 59, 0.15);
 }
@@ -812,11 +811,6 @@ button:focus-visible {
 .turn-chip.warning {
   background: rgba(122, 35, 43, 0.12);
   color: var(--danger);
-}
-
-.turn-chip.bonus {
-  background: rgba(36, 91, 67, 0.12);
-  color: var(--good);
 }
 
 .board-shell {
@@ -1041,10 +1035,6 @@ button:focus-visible {
   font-size: 12px;
   font-weight: 800;
   color: #5b473a;
-}
-
-.hud-chip.accent {
-  color: var(--good);
 }
 
 .hud-chip.subdued {

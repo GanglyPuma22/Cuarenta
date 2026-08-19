@@ -3,6 +3,7 @@ const RANKS = ['A', '2', '3', '4', '5', '6', '7', 'J', 'Q', 'K'];
 const NUMERIC_RANKS = new Set(['A', '2', '3', '4', '5', '6', '7']);
 const RANK_TO_VALUE = { A: 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, J: 8, Q: 9, K: 10 };
 const TEAM_IDS = ['A', 'B'];
+const CARD_POINT_CEILING = 30;
 const PLAYER_COUNT = 4;
 const DEAL_NUMBERS = [1, 2];
 
@@ -562,6 +563,15 @@ export function getComputerTurnKey(game) {
   return `${round.handNumber}:${round.activeDeal}:${round.turnPlayerId}`;
 }
 
+// The card count stops paying at 30. A team already on 30 or more collects
+// nothing from the count, and a team below it collects only what fits under 30,
+// so the last ten points of a match can only come from caída or limpia during
+// play. The cap is per team: one side being capped never changes what the other
+// side is owed.
+function cappedCardPoints(scoreBefore, earned) {
+  return Math.max(0, Math.min(earned, CARD_POINT_CEILING - scoreBefore));
+}
+
 function finalizeHand(game, lastActorId) {
   const round = game.round;
   const pointsByCards = { A: 0, B: 0 };
@@ -585,6 +595,10 @@ function finalizeHand(game, lastActorId) {
     pointsByCards[nonDealerTeam] = 2;
   } else {
     pointsByCards[a > b ? 'A' : 'B'] = 2;
+  }
+
+  for (const teamId of TEAM_IDS) {
+    pointsByCards[teamId] = cappedCardPoints(game.scores[teamId] || 0, pointsByCards[teamId]);
   }
 
   const nextScores = { A: game.scores.A + pointsByCards.A, B: game.scores.B + pointsByCards.B };
