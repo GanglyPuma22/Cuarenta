@@ -1117,16 +1117,23 @@ export default function App() {
   useEffect(() => {
     if (!isHost || !computerTurnKey || !gameRef || !playerId) return undefined;
 
-    const timer = window.setTimeout(() => {
-      runTransaction(gameRef, (current) => {
-        const activeComputerId = current?.round?.turnPlayerId;
-        if (!current || current.hostId !== playerId || !current.players?.[activeComputerId]?.isComputer) return current;
-        if (getComputerTurnKey(current) !== computerTurnKey) return current;
-        const move = selectComputerMove(current, activeComputerId);
-        return move ? applyMove(current, activeComputerId, move) : current;
-      }, { applyLocally: false }).catch((transactionError) => {
+    // runTransaction evaluates the update callback synchronously before it
+    // returns a promise, so a throw from applyMove escapes the chained .catch()
+    // entirely and would surface as an uncaught exception out of this timer.
+    // Awaiting inside try/catch is what actually contains it.
+    const timer = window.setTimeout(async () => {
+      try {
+        await runTransaction(gameRef, (current) => {
+          const activeComputerId = current?.round?.turnPlayerId;
+          if (!current || current.hostId !== playerId || !current.players?.[activeComputerId]?.isComputer) return current;
+          if (getComputerTurnKey(current) !== computerTurnKey) return current;
+          const move = selectComputerMove(current, activeComputerId);
+          return move ? applyMove(current, activeComputerId, move) : current;
+        }, { applyLocally: false });
+      } catch (transactionError) {
+        console.error('Computer move transaction failed', transactionError);
         setError(transactionError.message || 'Could not play the computer move.');
-      });
+      }
     }, 650);
 
     return () => window.clearTimeout(timer);
@@ -1322,13 +1329,19 @@ export default function App() {
     if (!(game.seating || []).length) return setError('Need at least one player.');
     setBusy(true);
     setError('');
-    await runTransaction(gameRef, (current) => {
-      if (!current) return current;
-      if (current.hostId !== playerId) throw new Error('Only host can start.');
-      if (!(current.seating || []).length) throw new Error('Need at least one player.');
-      return startMatchFromLobby(current);
-    }, { applyLocally: false }).catch((transactionError) => setError(transactionError.message || 'Could not start game.'));
-    setBusy(false);
+    try {
+      await runTransaction(gameRef, (current) => {
+        if (!current) return current;
+        if (current.hostId !== playerId) throw new Error('Only host can start.');
+        if (!(current.seating || []).length) throw new Error('Need at least one player.');
+        return startMatchFromLobby(current);
+      }, { applyLocally: false });
+    } catch (transactionError) {
+      console.error('Start game transaction failed', transactionError);
+      setError(transactionError.message || 'Could not start game.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function playChosenMove(move) {
@@ -1339,11 +1352,17 @@ export default function App() {
     setPreviewMoveKey('');
     setBusy(true);
     setError('');
-    await runTransaction(gameRef, (current) => {
-      if (!current) return current;
-      return applyMove(current, playerId, move);
-    }, { applyLocally: false }).catch((transactionError) => setError(transactionError.message || 'Could not play move.'));
-    setBusy(false);
+    try {
+      await runTransaction(gameRef, (current) => {
+        if (!current) return current;
+        return applyMove(current, playerId, move);
+      }, { applyLocally: false });
+    } catch (transactionError) {
+      console.error('Move transaction failed', transactionError);
+      setError(transactionError.message || 'Could not play move.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   const firebaseUnavailable = firebaseMode === 'unconfigured';
