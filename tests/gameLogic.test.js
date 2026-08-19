@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
@@ -633,4 +633,37 @@ test('resolved move feedback audio cues only fire for caída and limpia', () => 
     stacked.tones.length > caida.tones.length,
     'the stacked bonus gets the longest motif'
   );
+});
+
+
+// Firebase Realtime Database stores no empty arrays. A round read back from a
+// snapshot is therefore missing every collection that was empty when it was
+// written, which is what deletes a player's hand entry the moment they run out
+// of cards. The engine has to read those gaps as empty hands.
+test('a hand entry pruned by Firebase reads as an empty hand instead of throwing', () => {
+  const game = buildGame({
+    activeDeal: 2,
+    playsInCurrentDeal: 17,
+    board: [card('3', '\u2666', 'b3')],
+    hostHand: [card('K', '\u2660', 'hk')],
+  });
+
+  // Beto emptied his deal-two hand, so the snapshot carries no `hands.p2` key.
+  delete game.round.hands.p2;
+  // Caro is the mirror case: the per-deal entry is the one that went missing.
+  delete game.round.perDealHands[2].p3;
+
+  assert.deepEqual(getVisibleHand(game.round, 'p2'), [], 'a missing ownership list is an empty hand');
+  assert.deepEqual(getVisibleHand(game.round, 'p3'), [], 'a missing per-deal list is an empty hand');
+
+  const moves = getLegalMoves(game.round, 'p1');
+  assert.ok(moves.length > 0, 'the active player still has legal moves');
+
+  const next = applyMove(game, 'p1', moves.find((move) => move.type === 'trail'));
+
+  assert.equal(next.round.turnPlayerId, 'p2', 'the deal-completion check clears the pruned seats');
+  assert.deepEqual(next.round.hands.p2, [], 'the pruned ownership entry is restored as an empty hand');
+  assert.deepEqual(next.round.perDealHands[2].p3, [], 'the pruned per-deal entry is restored as an empty hand');
+  assert.deepEqual(next.round.hands.p1.map((held) => held.id), [], 'the played card leaves the active hand');
+  assert.deepEqual(next.round.board.map((held) => held.id), ['b3', 'hk'], 'the trail still lands on the board');
 });
