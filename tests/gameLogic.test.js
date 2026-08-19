@@ -667,3 +667,73 @@ test('a hand entry pruned by Firebase reads as an empty hand instead of throwing
   assert.deepEqual(next.round.hands.p1.map((held) => held.id), [], 'the played card leaves the active hand');
   assert.deepEqual(next.round.board.map((held) => held.id), ['b3', 'hk'], 'the trail still lands on the board');
 });
+
+
+// A round that has not scored a ronda yet is written with `rondaClaims: []`, so
+// the snapshot comes back with no `rondaClaims` key. The deal-two announcement
+// runs on exactly that state, right after the last deal-one card is played.
+function buildPrunedRondaClaimsGame() {
+  const game = buildGame({
+    activeDeal: 1,
+    playsInCurrentDeal: 19,
+    board: [],
+    hostHand: [card('K', '\u2660', 'hk')],
+  });
+
+  const dealTwo = {
+    p1: [card('2', '\u2660', 'd2_p1a'), card('3', '\u2660', 'd2_p1b'), card('4', '\u2660', 'd2_p1c'), card('5', '\u2660', 'd2_p1d'), card('6', '\u2660', 'd2_p1e')],
+    // Beto is dealt three sevens: a ronda for team B, not four of a kind.
+    p2: [card('7', '\u2660', 'd2_p2a'), card('7', '\u2665', 'd2_p2b'), card('7', '\u2666', 'd2_p2c'), card('2', '\u2665', 'd2_p2d'), card('3', '\u2665', 'd2_p2e')],
+    p3: [card('A', '\u2663', 'd2_p3a'), card('2', '\u2663', 'd2_p3b'), card('3', '\u2663', 'd2_p3c'), card('4', '\u2663', 'd2_p3d'), card('5', '\u2663', 'd2_p3e')],
+    p4: [card('6', '\u2665', 'd2_p4a'), card('J', '\u2660', 'd2_p4b'), card('Q', '\u2665', 'd2_p4c'), card('K', '\u2666', 'd2_p4d'), card('A', '\u2666', 'd2_p4e')],
+  };
+
+  // Everyone but the host has played out deal one; their deal-one cards are gone
+  // from `hands` but the deal-two cards they still hold are not.
+  game.round.hands = {
+    p1: [card('K', '\u2660', 'hk'), ...dealTwo.p1],
+    p2: [...dealTwo.p2],
+    p3: [...dealTwo.p3],
+    p4: [...dealTwo.p4],
+  };
+  game.round.perDealHands = {
+    1: game.round.perDealHands[1],
+    2: dealTwo,
+  };
+  return game;
+}
+
+test('the deal-two announcement records a ronda even when Firebase pruned the empty claims list', () => {
+  const game = buildPrunedRondaClaimsGame();
+  delete game.round.rondaClaims;
+
+  assert.deepEqual(getVisibleHand(game.round, 'p2'), [], 'deal one is played out for the other seats');
+
+  const trail = getLegalMoves(game.round, 'p1').find((move) => move.type === 'trail');
+  const next = applyMove(game, 'p1', trail);
+
+  assert.equal(next.round.activeDeal, 2, 'the last deal-one card opens deal two');
+  assert.equal(next.status, 'playing', 'a ronda is not a four-of-a-kind win');
+  assert.deepEqual(next.round.rondaClaims, [
+    { playerId: 'p2', teamId: 'B', dealNumber: 2, ranks: ['7'] },
+  ], 'the claim is appended to a rebuilt list');
+  assert.equal(next.scores.B, 4, 'the ronda still scores its four points');
+  assert.equal(next.scores.A, 0);
+  assert.ok(next.round.events.some((event) => /announced ronda/.test(event)));
+});
+
+test('a pruned claims list does not invent a ronda that the deal did not contain', () => {
+  const game = buildPrunedRondaClaimsGame();
+  // Break up Beto's three sevens so no seat qualifies.
+  game.round.hands.p2[2] = card('J', '\u2666', 'd2_p2c');
+  game.round.perDealHands[2].p2 = game.round.hands.p2;
+  delete game.round.rondaClaims;
+
+  const trail = getLegalMoves(game.round, 'p1').find((move) => move.type === 'trail');
+  const next = applyMove(game, 'p1', trail);
+
+  assert.equal(next.round.activeDeal, 2);
+  assert.deepEqual(next.round.rondaClaims, [], 'the rebuilt list stays empty');
+  assert.equal(next.scores.A, 0);
+  assert.equal(next.scores.B, 0);
+});
