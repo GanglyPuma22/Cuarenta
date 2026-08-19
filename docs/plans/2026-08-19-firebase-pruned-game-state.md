@@ -108,6 +108,12 @@ Run: `git add tests/gameLogic.test.js && git commit -m "test: simulate Firebase 
 
 Review the host computer-turn timer and `playChosenMove`. Preserve host authority, existing concurrency guards, and normal UI behavior.
 
+Correction applied during implementation: `startGame` uses the same fragile
+`.catch()` chain and its update callback throws synchronously by design (the host
+and empty-seating checks), so it has the identical stuck-busy defect. It is
+included. `createGame` and `joinGame` already use `try/catch/finally` and are left
+alone.
+
 **Step 2: Contain synchronous and asynchronous transaction failures**
 
 Use async `try/catch/finally` paths so exceptions thrown while evaluating an update callback become `setError(...)`, human busy state clears, and a computer timer does not throw out of its callback. Log the original error for diagnosis; do not change game state merely to log it.
