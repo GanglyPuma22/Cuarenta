@@ -4,7 +4,7 @@ import { get, onValue, ref, runTransaction } from 'firebase/database';
 import { auth, db, firebaseConfigError, firebaseMode, hasFirebase } from './lib/firebase';
 import { createRealtimeAuthProbe, waitForRealtimeAuth } from './lib/firebaseReady';
 import { getSavedName, saveName } from './lib/localPlayer';
-import { applyMove, createInitialGameState, generateGameCode, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
+import { applyMove, configureLobbySeat, createInitialGameState, generateGameCode, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getLobbySeats, getTeamIdForSeat, getVisibleHand, joinLobby, moveKey, selectComputerMove, startMatchFromLobby, teamSummary } from './lib/gameLogic';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from './lib/moveFeedback';
 import { buildGameUrl, clearSavedSession, getGameCodeFromUrl, getSavedSession, isValidGameCode, normalizeGameCode, saveGameSession, syncGameUrl } from './lib/session';
 
@@ -363,15 +363,35 @@ function ReferenceDrawer({ tab, onRequestClose, onTabChange }) {
   );
 }
 
-function LobbySeat({ player, isCurrent, slot }) {
+function LobbySeat({ entry, players, isCurrent, isHost, onChange, slot, busy }) {
+  const player = entry?.kind === 'player' ? players?.[entry.playerId] : null;
+  const isComputer = entry?.kind === 'computer';
+  const teamId = getTeamIdForSeat(slot);
+  const value = player ? `player:${player.id}` : (isComputer ? 'computer' : 'open');
+
   return (
-    <div className={`lobby-seat ${player ? 'filled' : 'empty'} ${player?.isComputer ? 'computer' : ''} ${isCurrent ? 'current' : ''}`}>
-      <div className="avatar-orb">{player ? (player.name || '?').slice(0, 1).toUpperCase() : '+'}</div>
+    <div className={`lobby-seat ${player ? 'filled' : 'empty'} ${isComputer ? 'computer' : ''} ${isCurrent ? 'current' : ''}`}>
+      <div className="seat-position">Team {teamId} · Position {slot}</div>
+      <div className="avatar-orb">{player ? (player.name || '?').slice(0, 1).toUpperCase() : (isComputer ? 'C' : '+')}</div>
       <div className="seat-copy">
-        <div className="seat-name">{player?.name || `Player ${slot}`}</div>
-        <div className="seat-status">{player ? (player.isComputer ? 'Computer player' : (isCurrent ? 'Ready to play' : 'Waiting in lobby')) : 'Computer will fill this seat at start'}</div>
+        <div className="seat-name">{player?.name || (isComputer ? 'Computer' : `Open position ${slot}`)}</div>
+        <div className="seat-status">{player ? (isCurrent ? 'Ready to play' : 'Waiting in lobby') : (isComputer ? 'Reserved computer player' : 'Computer will fill at start')}</div>
       </div>
       {player?.isHost ? <div className="host-badge">Host</div> : null}
+      {isHost ? (
+        <label className="seat-select-label">
+          Assign position
+          <select value={value} disabled={busy} onChange={(event) => onChange(slot, event.target.value)}>
+            {Object.values(players || {}).filter((candidate) => !candidate.isComputer).map((candidate) => (
+              <option key={candidate.id} value={`player:${candidate.id}`}>{candidate.name}</option>
+            ))}
+            {!player ? <>
+              <option value="open">Open</option>
+              <option value="computer">Computer</option>
+            </> : null}
+          </select>
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -1052,6 +1072,7 @@ export default function App() {
   }, [game?.code, game?.players?.[playerId], playerId, savedSession?.gameCode]);
 
   const seating = game?.seating?.map((id) => game.players[id]);
+  const lobbySeats = game?.status === 'lobby' ? getLobbySeats(game) : null;
   const isParticipant = Boolean(game?.players?.[playerId]);
   const round = game?.round;
   const boardCards = Array.isArray(round?.board) ? round.board : [];
@@ -1281,25 +1302,21 @@ export default function App() {
       }
 
       if (existing.status !== 'lobby') throw new Error('Game already started. Reopen the original game link on the same browser to reconnect.');
-      if ((existing.seating || []).length >= 4) throw new Error('Game is full.');
+      if (!Object.values(getLobbySeats(existing)).some((seat) => seat.kind === 'open')) throw new Error('Game is full.');
 
       const result = await runTransaction(joinRef, (current) => {
         if (!current) return current;
-        current.players ||= {};
-        current.seating ||= [];
         const now = Date.now();
-        current.players[playerId] = {
+        const joined = joinLobby(current, {
           id: playerId,
           name: trimmed,
           joinedAt: now,
           lastSeenAt: now,
           reconnectCount: 0,
           isHost: current.hostId === playerId,
-        };
-        if (!current.seating.includes(playerId)) current.seating.push(playerId);
-        current.lobbyMessage = current.seating.length === 4 ? 'Ready for host review' : 'Waiting for players';
-        stampSessionMetadata(current, { now, action: 'player_joined', actorId: playerId });
-        return current;
+        });
+        stampSessionMetadata(joined, { now, action: 'player_joined', actorId: playerId });
+        return joined;
       }, { applyLocally: false });
 
       if (!result?.snapshot?.exists()) throw new Error('Game not found.');
@@ -1308,6 +1325,27 @@ export default function App() {
       setGameCode(code);
     } catch (transactionError) {
       setError(transactionError.message || 'Unable to join game.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeLobbySeat(slot, value) {
+    if (!isHost || !gameRef) return;
+    const selection = value.startsWith('player:')
+      ? { kind: 'player', playerId: value.slice('player:'.length) }
+      : { kind: value };
+    setBusy(true);
+    setError('');
+    try {
+      await runTransaction(gameRef, (current) => {
+        if (!current) return current;
+        const configured = configureLobbySeat(current, playerId, slot, selection);
+        stampSessionMetadata(configured, { action: 'lobby_seat_changed', actorId: playerId });
+        return configured;
+      }, { applyLocally: false });
+    } catch (transactionError) {
+      setError(transactionError.message || 'Could not update that position.');
     } finally {
       setBusy(false);
     }
@@ -1480,8 +1518,19 @@ export default function App() {
           <section className="notice-card slim-note">
             Rejoin URL: <strong>{shareUrl}</strong>
           </section>
-          <div className="lobby-grid">
-            {[0, 1, 2, 3].map((index) => <LobbySeat key={index} slot={index + 1} player={seating?.[index]} isCurrent={seating?.[index]?.id === playerId} />)}
+          <div className="lobby-team-grid">
+            {['A', 'B'].map((teamId) => (
+              <section className="lobby-team" key={teamId}>
+                <div className="lobby-team-heading">Team {teamId}<span>Positions {teamId === 'A' ? '1 & 3' : '2 & 4'}</span></div>
+                <div className="lobby-grid">
+                  {[1, 2, 3, 4].filter((slot) => getTeamIdForSeat(slot) === teamId).map((slot) => {
+                    const entry = lobbySeats?.[slot];
+                    const seatedPlayer = entry?.kind === 'player' ? game.players?.[entry.playerId] : null;
+                    return <LobbySeat key={slot} slot={slot} entry={entry} players={game.players} isCurrent={seatedPlayer?.id === playerId} isHost={isHost} onChange={changeLobbySeat} busy={busy} />;
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
           {!isParticipant ? (
             <section className="auth-card join-lobby-card">
@@ -1494,8 +1543,8 @@ export default function App() {
             </section>
           ) : (
             <div className="lobby-actions">
-              {isHost ? <button className="primary-button wide" disabled={busy || !canUseRealtime || !(game.seating || []).length} onClick={startGame}>Start with computer players</button> : null}
-              <div className="lobby-footnote">Empty seats become computer players when the host starts</div>
+              {isHost ? <button className="primary-button wide" disabled={busy || !canUseRealtime || !(game.seating || []).length} onClick={startGame}>Start game</button> : null}
+              <div className="lobby-footnote">Host can swap teammates or reserve open positions for computers. Any open position becomes a computer when the game starts.</div>
             </div>
           )}
         </section>

@@ -6,6 +6,7 @@ const TEAM_IDS = ['A', 'B'];
 const CARD_POINT_CEILING = 30;
 const PLAYER_COUNT = 4;
 const DEAL_NUMBERS = [1, 2];
+const LOBBY_SEAT_NUMBERS = [1, 2, 3, 4];
 
 export function rankValue(rank) {
   return RANK_TO_VALUE[rank];
@@ -160,6 +161,12 @@ export function createInitialGameState(hostName, hostId) {
       },
     },
     seating: [hostId],
+    lobbySeats: {
+      1: { kind: 'player', playerId: hostId },
+      2: { kind: 'open' },
+      3: { kind: 'open' },
+      4: { kind: 'open' },
+    },
     scores: { A: 0, B: 0 },
     lobbyMessage: 'Waiting for players',
   }, {
@@ -167,6 +174,105 @@ export function createInitialGameState(hostName, hostId) {
     lastAction: 'lobby_created',
     lastActorId: hostId,
   });
+}
+
+function openLobbySeat() {
+  return { kind: 'open' };
+}
+
+function playerLobbySeat(playerId) {
+  return { kind: 'player', playerId };
+}
+
+function isLobbySeatNumber(seat) {
+  return Number.isInteger(seat) && LOBBY_SEAT_NUMBERS.includes(seat);
+}
+
+// Firebase may omit unknown or malformed children, and games created before
+// selectable teams only have the sequential `seating` array. Normalize both
+// forms into four explicit position records before a lobby operation.
+export function getLobbySeats(game) {
+  const seats = Object.fromEntries(LOBBY_SEAT_NUMBERS.map((seat) => [seat, openLobbySeat()]));
+  const usedPlayerIds = new Set();
+  const storedSeats = game?.lobbySeats || {};
+
+  for (const seat of LOBBY_SEAT_NUMBERS) {
+    const entry = storedSeats[seat];
+    if (entry?.kind === 'computer') {
+      seats[seat] = { kind: 'computer' };
+      continue;
+    }
+    if (entry?.kind === 'player' && entry.playerId && game?.players?.[entry.playerId] && !usedPlayerIds.has(entry.playerId)) {
+      seats[seat] = playerLobbySeat(entry.playerId);
+      usedPlayerIds.add(entry.playerId);
+    }
+  }
+
+  for (const playerId of game?.seating || []) {
+    if (!game?.players?.[playerId] || game.players[playerId].isComputer || usedPlayerIds.has(playerId)) continue;
+    const seat = LOBBY_SEAT_NUMBERS.find((candidate) => seats[candidate].kind === 'open');
+    if (!seat) break;
+    seats[seat] = playerLobbySeat(playerId);
+    usedPlayerIds.add(playerId);
+  }
+
+  return seats;
+}
+
+function humanSeatingFromLobbySeats(lobbySeats) {
+  return LOBBY_SEAT_NUMBERS
+    .map((seat) => lobbySeats[seat])
+    .filter((entry) => entry.kind === 'player')
+    .map((entry) => entry.playerId);
+}
+
+function withLobbySeats(game, lobbySeats, lobbyMessage = game.lobbyMessage) {
+  return {
+    ...game,
+    lobbySeats,
+    seating: humanSeatingFromLobbySeats(lobbySeats),
+    lobbyMessage,
+  };
+}
+
+export function joinLobby(game, player) {
+  if (game?.status !== 'lobby') throw new Error('Game already started.');
+  if (!player?.id) throw new Error('A player ID is required.');
+
+  const lobbySeats = getLobbySeats(game);
+  if (humanSeatingFromLobbySeats(lobbySeats).includes(player.id)) return withLobbySeats(game, lobbySeats);
+  const openSeat = LOBBY_SEAT_NUMBERS.find((seat) => lobbySeats[seat].kind === 'open');
+  if (!openSeat) throw new Error('Game is full.');
+
+  lobbySeats[openSeat] = playerLobbySeat(player.id);
+  return withLobbySeats({ ...game, players: { ...game.players, [player.id]: player } }, lobbySeats,
+    humanSeatingFromLobbySeats(lobbySeats).length === PLAYER_COUNT ? 'Ready for host review' : 'Waiting for players');
+}
+
+export function configureLobbySeat(game, hostId, seat, selection) {
+  if (game?.status !== 'lobby') throw new Error('Game already started.');
+  if (game.hostId !== hostId) throw new Error('Only host can arrange teams.');
+  if (!isLobbySeatNumber(seat)) throw new Error('Invalid lobby seat.');
+
+  const lobbySeats = getLobbySeats(game);
+  const current = lobbySeats[seat];
+  if (selection?.kind === 'computer' || selection?.kind === 'open') {
+    if (current.kind === 'player') throw new Error('Move a player by selecting another player.');
+    lobbySeats[seat] = { kind: selection.kind };
+    return withLobbySeats(game, lobbySeats);
+  }
+
+  if (selection?.kind !== 'player' || !game.players?.[selection.playerId] || game.players[selection.playerId].isComputer) {
+    throw new Error('Choose a player already in this lobby.');
+  }
+  const sourceSeat = LOBBY_SEAT_NUMBERS.find((candidate) => (
+    lobbySeats[candidate].kind === 'player' && lobbySeats[candidate].playerId === selection.playerId
+  ));
+  if (!sourceSeat) throw new Error('Choose a player already in this lobby.');
+
+  lobbySeats[seat] = playerLobbySeat(selection.playerId);
+  if (sourceSeat !== seat) lobbySeats[sourceSeat] = current;
+  return withLobbySeats(game, lobbySeats);
 }
 
 function buildRound(players, dealerIndex, scores, handNumber = 1) {
@@ -218,12 +324,13 @@ function buildRound(players, dealerIndex, scores, handNumber = 1) {
 
 function fillComputerSeats(game, now) {
   const players = { ...game.players };
-  const seating = [...game.seating];
+  const lobbySeats = getLobbySeats(game);
+  const seating = [];
   let computerNumber = 1;
 
-  while (seating.length < PLAYER_COUNT) {
+  function addComputer() {
     const id = `computer_${computerNumber++}`;
-    if (players[id]) continue;
+    if (players[id]) return addComputer();
     players[id] = {
       id,
       name: `Computer ${computerNumber - 1}`,
@@ -234,6 +341,12 @@ function fillComputerSeats(game, now) {
       isComputer: true,
     };
     seating.push(id);
+  }
+
+  for (const seat of LOBBY_SEAT_NUMBERS) {
+    const entry = lobbySeats[seat];
+    if (entry.kind === 'player' && players[entry.playerId]) seating.push(entry.playerId);
+    else addComputer();
   }
 
   return { players, seating };

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { analyzeMove, applyMove, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getVisibleHand, isComputerTurnActive, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
+import { analyzeMove, applyMove, configureLobbySeat, getComputerTurnKey, getDealerPlayerId, getDisplayedMoves, getLegalMoves, getLobbySeats, getVisibleHand, isComputerTurnActive, joinLobby, rankValue, selectComputerMove, startMatchFromLobby } from '../src/lib/gameLogic.js';
 import { describeRoundTransition, getFeedbackAudioCue, resolveMoveFeedback } from '../src/lib/moveFeedback.js';
 
 function card(rank, suit, id) {
@@ -232,6 +232,46 @@ test('starting a partial lobby fills the remaining seats with computer players',
   assert.equal(started.seating.length, 4);
   assert.deepEqual(computerIds, ['computer_1', 'computer_2']);
   assert.deepEqual(computerIds.map((id) => started.players[id].name), ['Computer 1', 'Computer 2']);
+});
+
+test('legacy lobbies derive fixed positions and newcomers take the next open position', () => {
+  const lobby = lobbyOf(['p1', 'p2']);
+  const seats = getLobbySeats(lobby);
+
+  assert.deepEqual(seats, {
+    1: { kind: 'player', playerId: 'p1' },
+    2: { kind: 'player', playerId: 'p2' },
+    3: { kind: 'open' },
+    4: { kind: 'open' },
+  });
+
+  const joined = joinLobby(lobby, { id: 'p3', name: 'Caro' });
+  assert.deepEqual(joined.seating, ['p1', 'p2', 'p3']);
+  assert.equal(joined.lobbySeats[3].playerId, 'p3');
+});
+
+test('only the host can swap lobby players between team positions', () => {
+  const lobby = lobbyOf(['p1', 'p2', 'p3']);
+
+  assert.throws(
+    () => configureLobbySeat(lobby, 'p2', 2, { kind: 'player', playerId: 'p3' }),
+    /Only host/i
+  );
+
+  const moved = configureLobbySeat(lobby, 'p1', 2, { kind: 'player', playerId: 'p3' });
+  assert.deepEqual(moved.seating, ['p1', 'p3', 'p2']);
+  assert.equal(moved.lobbySeats[2].playerId, 'p3');
+  assert.equal(moved.lobbySeats[3].playerId, 'p2');
+});
+
+test('host can reserve an open position for a computer and start keeps that team position', () => {
+  const lobby = lobbyOf(['p1', 'p2']);
+  const configured = configureLobbySeat(lobby, 'p1', 3, { kind: 'computer' });
+  const started = startMatchFromLobby(configured);
+
+  assert.equal(started.players[started.seating[2]].isComputer, true);
+  assert.equal(started.round.teamsByPlayer[started.seating[2]].teamId, 'A');
+  assert.equal(started.players[started.seating[3]].isComputer, true, 'unreserved open seats still auto-fill');
 });
 
 test('computer move selection prefers points, then captures, then a stable move key', () => {
