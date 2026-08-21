@@ -45,9 +45,6 @@
           },
           "B": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 80"
-          },
-          "$other": {
-            ".validate": false
           }
         },
         "players": {
@@ -102,9 +99,6 @@
             "$other": {
               ".validate": false
             }
-          },
-          "$other": {
-            ".validate": false
           }
         },
         "session": {
