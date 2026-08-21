@@ -442,9 +442,36 @@ button:focus-visible {
   font-size: 13px;
 }
 
-.lobby-grid {
+.lobby-team-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.lobby-team {
+  display: grid;
+  gap: 12px;
+}
+
+.lobby-team-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--primary-deep);
+  font-family: 'Noto Serif', serif;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.lobby-team-heading span {
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lobby-grid {
+  display: grid;
   gap: 16px;
 }
 
@@ -455,6 +482,23 @@ button:focus-visible {
   align-items: center;
   gap: 14px;
   position: relative;
+  flex-wrap: wrap;
+}
+
+.seat-position {
+  position: absolute;
+  left: 18px;
+  top: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lobby-seat .avatar-orb,
+.lobby-seat .seat-copy {
+  margin-top: 12px;
 }
 
 .lobby-seat.current {
@@ -508,6 +552,19 @@ button:focus-visible {
   color: white;
   font-size: 11px;
   font-weight: 800;
+}
+
+.seat-select-label {
+  width: 100%;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.seat-select-label select {
+  padding: 10px 12px;
+  font-size: 14px;
 }
 
 .lobby-actions {
@@ -1781,7 +1838,7 @@ button:focus-visible {
 
 @media (max-width: 860px) {
   .activity-column,
-  .lobby-grid,
+  .lobby-team-grid,
   .join-inline,
   .resume-card,
   .round-brief {
